@@ -222,10 +222,26 @@ def process_video(video_path, output_file, save_previews=True):
         print(f"Preview frames saved to: {preview_dir}/")
         print(f"Total preview frames: {(frame_number // 24) + 1}")
 
+def cleanup_previous_runs():
+    """Clean up files from previous runs"""
+    # Remove preview frames directory
+    if os.path.exists('preview_frames'):
+        os.system('rm -rf preview_frames')
+        print("Cleaned up previous preview frames")
+
+    # Remove output file
+    if os.path.exists('output.txt'):
+        os.system('rm -f output.txt')
+        print("Cleaned up previous output.txt")
+
 def main():
     """Main program entry point"""
     print("Light to Sheet - Video Brightness Analysis Tool")
     print("=" * 50)
+
+    # Clean up any previous run data
+    cleanup_previous_runs()
+    print()
 
     url = input("Enter YouTube video URL: ").strip()
 
