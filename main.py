@@ -150,7 +150,7 @@ def analyze_frame_brightness(frame, visualize=False):
 
         avg_brightness = np.mean(slice_region)
         brightness_percentage = (avg_brightness / 255.0) * 100.0
-        brightness_values.append(round(brightness_percentage, 1))
+        brightness_values.append(int(round(brightness_percentage)))
 
         if visualize:
             # Color code each slice based on brightness
