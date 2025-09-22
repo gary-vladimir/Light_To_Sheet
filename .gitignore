@@ -1,0 +1,27 @@
+# Python virtual environments
+my_env/
+venv/
+env/
+.env
+*.pyc
+__pycache__/
+
+# Output files
+output.txt
+preview_frames/
+
+# Downloaded videos
+downloaded_videos/
+
+# Temporary files
+*.tmp
+*.temp
+video_processed.mp4
+
+# IDE and system files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
