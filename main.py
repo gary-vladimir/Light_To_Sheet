@@ -178,7 +178,7 @@ def process_video(video_path, output_file, save_previews=True):
         if not os.path.exists(preview_dir):
             os.makedirs(preview_dir)
         print(f"Saving preview frames to: {preview_dir}/")
-        print("Preview frames will be saved every 24 frames (1 second)")
+        print("Preview frames will be saved every 6 frames (4 previews per second)")
 
     cap = cv2.VideoCapture(video_path)
     fps = 24.0
@@ -208,11 +208,12 @@ def process_video(video_path, output_file, save_previews=True):
                 cv2.putText(vis_frame, stats_text, (10, 60),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
 
-                # Save preview frame every second (24 frames)
-                if frame_number % 24 == 0:
+                # Save preview frame every 6 frames (4 times per second)
+                if frame_number % 6 == 0:
                     preview_path = os.path.join(preview_dir, f"frame_{frame_number:06d}.jpg")
                     cv2.imwrite(preview_path, vis_frame)
-                    print(f"Saved preview: {preview_path}")
+                    if frame_number % 24 == 0:  # Only print every second to reduce console spam
+                        print(f"Saved preview: {preview_path}")
             else:
                 brightness_values = analyze_frame_brightness(frame)
 
@@ -239,7 +240,7 @@ def process_video(video_path, output_file, save_previews=True):
 
     if save_previews:
         print(f"Preview frames saved to: {preview_dir}/")
-        print(f"Total preview frames: {(frame_number // 24) + 1}")
+        print(f"Total preview frames: {(frame_number // 6)}")
 
 def cleanup_previous_runs():
     """Clean up files from previous runs (but keep downloaded videos)"""
