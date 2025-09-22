@@ -61,6 +61,34 @@ import time
 import tempfile
 from datetime import timedelta
 
+def get_note_pitch_value(note_str):
+    """Convert note string (e.g., 'C#4') to a numeric pitch value for sorting"""
+    # Parse note and octave
+    if '#' in note_str:
+        note = note_str[:2]  # e.g., 'C#'
+        octave = int(note_str[2:])
+    else:
+        note = note_str[0]  # e.g., 'C'
+        octave = int(note_str[1:])
+
+    # Note values within an octave (C=0, C#=1, D=2, etc.)
+    note_values = {
+        'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5,
+        'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11
+    }
+
+    # Calculate absolute pitch value
+    return octave * 12 + note_values[note]
+
+def format_note_3char(note_str):
+    """Format note to exactly 3 characters for alignment"""
+    if len(note_str) == 2:  # e.g., 'C4'
+        return note_str + ' '
+    elif len(note_str) == 3:  # e.g., 'C#4'
+        return note_str
+    else:
+        return '---'  # Fallback for unexpected format
+
 def download_youtube_video(url):
     """Download YouTube video and save locally for reuse"""
     print(f"Downloading video from: {url}")
@@ -213,8 +241,12 @@ def process_video(video_path, output_file, save_previews=True):
     frame_duration = 1.0 / fps
     frame_number = 0
 
-    # Create CSV file with piano note headers
+    # Create CSV file with piano note headers and sheet music file
     piano_csv = 'piano.csv'
+    sheet_music_file = 'sheet_music.txt'
+
+    # Initialize sheet music data structure - list of columns (frames)
+    sheet_music_columns = []
 
     with open(output_file, 'w') as f, open(piano_csv, 'w') as csv_f:
         # Write CSV header
@@ -268,15 +300,52 @@ def process_video(video_path, output_file, save_previews=True):
             csv_f.write(csv_line)
             csv_f.flush()
 
+            # Build sheet music column for this frame
+            active_notes = []
+            for i, value in enumerate(brightness_values):
+                if value == 1:  # Note is active
+                    active_notes.append(piano_notes[i])
+
+            # Sort notes by pitch (highest to lowest for display)
+            active_notes.sort(key=get_note_pitch_value, reverse=True)
+
+            # Format notes for display
+            if active_notes:
+                column = [format_note_3char(note) for note in active_notes]
+            else:
+                column = ['---']  # Silence
+
+            sheet_music_columns.append(column)
+
             time.sleep(frame_duration)
 
             frame_number += 1
 
     cap.release()
 
+    # Write sheet music to file
+    print("Generating sheet music...")
+    with open(sheet_music_file, 'w') as sheet_f:
+        # Find maximum number of simultaneous notes across all frames
+        max_notes = max(len(col) for col in sheet_music_columns) if sheet_music_columns else 1
+
+        # Build sheet music lines (each line is a row)
+        for row_idx in range(max_notes):
+            row_parts = []
+            for col in sheet_music_columns:
+                if row_idx < len(col):
+                    row_parts.append(col[row_idx])
+                else:
+                    row_parts.append('---')  # Fill empty spaces
+
+            # Join with spaces and write line
+            sheet_line = ' '.join(row_parts) + '\n'
+            sheet_f.write(sheet_line)
+
     print(f"\nProcessing complete. Total frames: {frame_number}")
     print(f"Results saved to: {output_file}")
     print(f"Piano CSV saved to: {piano_csv}")
+    print(f"Sheet music saved to: {sheet_music_file}")
 
     if save_previews:
         print(f"Preview frames saved to: {preview_dir}/")
@@ -297,6 +366,10 @@ def cleanup_previous_runs():
     if os.path.exists('piano.csv'):
         os.system('rm -f piano.csv')
         print("Cleaned up previous piano.csv")
+
+    if os.path.exists('sheet_music.txt'):
+        os.system('rm -f sheet_music.txt')
+        print("Cleaned up previous sheet_music.txt")
 
     # Note: We intentionally keep downloaded_videos directory to avoid re-downloading
 
