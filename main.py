@@ -36,7 +36,22 @@ Technical Notes:
 helper = [28,15,21,15,28,28,15,20,15,21,15,28]
 vertical_slices = [29,15,28] + (helper*7) + [33]
 tags = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
-slices_tags = ["A", "A#", "B"] + (tags*7) + "C"
+slices_tags = ["A", "A#", "B"] + (tags*7) + ["C"]
+
+# Generate piano notes with octave numbers (A0 to C8)
+piano_notes = []
+octave = 0  # Start at octave 0 for A0
+for i, note in enumerate(slices_tags):
+    # First three notes are A0, A#0, B0
+    if i == 0:
+        octave = 0
+    # After B, we go to C1 (new octave starts at C)
+    elif note == "C" and i == 3:
+        octave = 1
+    # Increment octave every time we hit a new C
+    elif note == "C" and i > 3:
+        octave += 1
+    piano_notes.append(f"{note}{octave}")
 
 import cv2
 import numpy as np
@@ -198,7 +213,13 @@ def process_video(video_path, output_file, save_previews=True):
     frame_duration = 1.0 / fps
     frame_number = 0
 
-    with open(output_file, 'w') as f:
+    # Create CSV file with piano note headers
+    piano_csv = 'piano.csv'
+
+    with open(output_file, 'w') as f, open(piano_csv, 'w') as csv_f:
+        # Write CSV header
+        header = "timestamp," + ",".join(piano_notes) + "\n"
+        csv_f.write(header)
         while True:
             ret, frame = cap.read()
             if not ret:
@@ -242,6 +263,11 @@ def process_video(video_path, output_file, save_previews=True):
             f.write(output_line + '\n')
             f.flush()
 
+            # Write to CSV with piano notes
+            csv_line = f"{timestamp_str}," + ",".join(map(str, brightness_values)) + "\n"
+            csv_f.write(csv_line)
+            csv_f.flush()
+
             time.sleep(frame_duration)
 
             frame_number += 1
@@ -250,6 +276,7 @@ def process_video(video_path, output_file, save_previews=True):
 
     print(f"\nProcessing complete. Total frames: {frame_number}")
     print(f"Results saved to: {output_file}")
+    print(f"Piano CSV saved to: {piano_csv}")
 
     if save_previews:
         print(f"Preview frames saved to: {preview_dir}/")
@@ -262,10 +289,14 @@ def cleanup_previous_runs():
         os.system('rm -rf preview_frames')
         print("Cleaned up previous preview frames")
 
-    # Remove output file
+    # Remove output files
     if os.path.exists('output.txt'):
         os.system('rm -f output.txt')
         print("Cleaned up previous output.txt")
+
+    if os.path.exists('piano.csv'):
+        os.system('rm -f piano.csv')
+        print("Cleaned up previous piano.csv")
 
     # Note: We intentionally keep downloaded_videos directory to avoid re-downloading
 
