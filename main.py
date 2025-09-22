@@ -33,6 +33,9 @@ Technical Notes:
 - Timestamps allow correlation between state arrays and video playback time
 """
 
+helper = [28,15,21,15,28,28,15,20,15,21,15,28]
+vertical_slices = [29,15,28] + (helper*7) + [33]
+
 import cv2
 import numpy as np
 import yt_dlp
@@ -122,11 +125,10 @@ def format_timestamp(seconds):
     return f"{hours:02d}:{minutes:02d}:{seconds:09.6f}"
 
 def analyze_frame_brightness(frame, visualize=False):
-    """Analyze brightness of 88 vertical slices at the top of the frame"""
+    """Analyze brightness using variable width vertical slices at the top of the frame"""
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     brightness_values = []
-    slice_width = 21
 
     # Create visualization if requested
     if visualize:
@@ -134,9 +136,15 @@ def analyze_frame_brightness(frame, visualize=False):
         # Draw analysis zone boundary (top row)
         cv2.rectangle(vis_frame, (0, 0), (1848, 1), (0, 255, 255), 2)
 
-    for i in range(88):
-        x_start = i * slice_width
-        x_end = x_start + slice_width
+    # Process each slice with its specific width
+    x_position = 0
+    for i, slice_width in enumerate(vertical_slices):
+        x_start = x_position
+        x_end = x_position + slice_width
+
+        # Ensure we don't go beyond frame width
+        if x_end > 1848:
+            x_end = 1848
 
         slice_region = gray[0:1, x_start:x_end]
 
@@ -158,11 +166,13 @@ def analyze_frame_brightness(frame, visualize=False):
             cv2.rectangle(vis_frame, (x_start, 1080 - bar_height),
                          (x_end - 1, 1080), color, -1)
 
-            # Add brightness value text
+            # Add brightness value text for selected slices
             if i % 11 == 0:  # Show every 11th value to avoid clutter
                 cv2.putText(vis_frame, f"{brightness_percentage:.0f}",
-                           (x_start, 1080 - bar_height - 5),
+                           (x_start + 2, 1080 - bar_height - 5),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
+
+        x_position = x_end
 
     if visualize:
         return brightness_values, vis_frame
