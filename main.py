@@ -35,6 +35,8 @@ Technical Notes:
 
 helper = [28,15,21,15,28,28,15,20,15,21,15,28]
 vertical_slices = [29,15,28] + (helper*7) + [33]
+tags = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
+slices_tags = ["A", "A#", "B"] + (tags*7) + "C"
 
 import cv2
 import numpy as np
@@ -150,7 +152,8 @@ def analyze_frame_brightness(frame, visualize=False):
 
         avg_brightness = np.mean(slice_region)
         brightness_percentage = (avg_brightness / 255.0) * 100.0
-        brightness_values.append(int(round(brightness_percentage)))
+        brightness_binary = 1 if brightness_percentage > 70 else 0
+        brightness_values.append(brightness_binary)
 
         if visualize:
             # Color code each slice based on brightness
