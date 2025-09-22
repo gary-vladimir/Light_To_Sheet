@@ -42,11 +42,30 @@ import tempfile
 from datetime import timedelta
 
 def download_youtube_video(url):
-    """Download YouTube video to a temporary file"""
+    """Download YouTube video and save locally for reuse"""
     print(f"Downloading video from: {url}")
 
-    temp_dir = tempfile.gettempdir()
-    output_path = os.path.join(temp_dir, 'video_temp.mp4')
+    # Create downloads directory if it doesn't exist
+    downloads_dir = 'downloaded_videos'
+    if not os.path.exists(downloads_dir):
+        os.makedirs(downloads_dir)
+
+    # Extract video ID from URL for filename
+    video_id = None
+    if 'youtube.com/watch?v=' in url:
+        video_id = url.split('v=')[1].split('&')[0]
+    elif 'youtu.be/' in url:
+        video_id = url.split('youtu.be/')[1].split('?')[0]
+
+    if not video_id:
+        video_id = 'video'
+
+    output_path = os.path.join(downloads_dir, f'{video_id}.mp4')
+
+    # Check if already downloaded
+    if os.path.exists(output_path):
+        print(f"Video already downloaded: {output_path}")
+        return output_path
 
     ydl_opts = {
         'format': 'best[ext=mp4]/best',
@@ -58,7 +77,7 @@ def download_youtube_video(url):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
 
-    print(f"Video downloaded to: {output_path}")
+    print(f"Video downloaded and saved to: {output_path}")
     return output_path
 
 def preprocess_video(input_path, output_path):
@@ -223,7 +242,7 @@ def process_video(video_path, output_file, save_previews=True):
         print(f"Total preview frames: {(frame_number // 24) + 1}")
 
 def cleanup_previous_runs():
-    """Clean up files from previous runs"""
+    """Clean up files from previous runs (but keep downloaded videos)"""
     # Remove preview frames directory
     if os.path.exists('preview_frames'):
         os.system('rm -rf preview_frames')
@@ -234,6 +253,8 @@ def cleanup_previous_runs():
         os.system('rm -f output.txt')
         print("Cleaned up previous output.txt")
 
+    # Note: We intentionally keep downloaded_videos directory to avoid re-downloading
+
 def main():
     """Main program entry point"""
     print("Light to Sheet - Video Brightness Analysis Tool")
@@ -243,10 +264,34 @@ def main():
     cleanup_previous_runs()
     print()
 
-    url = input("Enter YouTube video URL: ").strip()
+    # Ask for input type
+    print("Choose input source:")
+    print("1. YouTube URL")
+    print("2. Local video file")
+    choice = input("Enter choice (1 or 2): ").strip()
 
-    if not url:
-        print("Error: No URL provided")
+    video_source = None
+    if choice == '1':
+        url = input("Enter YouTube video URL: ").strip()
+        if not url:
+            print("Error: No URL provided")
+            return
+        video_source = download_youtube_video(url)
+    elif choice == '2':
+        file_path = input("Enter video file path (relative or absolute): ").strip()
+        if not file_path:
+            print("Error: No file path provided")
+            return
+        # Handle relative paths
+        if not os.path.isabs(file_path):
+            file_path = os.path.abspath(file_path)
+        if not os.path.exists(file_path):
+            print(f"Error: File not found: {file_path}")
+            return
+        video_source = file_path
+        print(f"Using local file: {video_source}")
+    else:
+        print("Invalid choice")
         return
 
     # Ask if user wants to save preview frames
@@ -254,15 +299,12 @@ def main():
     save_previews = save_previews != 'n'  # Default to yes unless explicitly no
 
     try:
-        temp_download = download_youtube_video(url)
-
         temp_processed = os.path.join(tempfile.gettempdir(), 'video_processed.mp4')
-        preprocess_video(temp_download, temp_processed)
+        preprocess_video(video_source, temp_processed)
 
         process_video(temp_processed, 'output.txt', save_previews)
 
-        if os.path.exists(temp_download):
-            os.remove(temp_download)
+        # Only remove temp processed file, not the source
         if os.path.exists(temp_processed):
             os.remove(temp_processed)
 
