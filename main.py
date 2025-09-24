@@ -332,11 +332,21 @@ def process_video(video_path, output_file, save_previews=True):
         # Build sheet music lines (each line is a row)
         for row_idx in range(max_notes):
             row_parts = []
-            for col in sheet_music_columns:
+            prev_note = None  # Track previous note to detect repeats
+
+            for col_idx, col in enumerate(sheet_music_columns):
                 if row_idx < len(col):
-                    row_parts.append(col[row_idx])
+                    current_note = col[row_idx]
+
+                    # Check if this note is the same as previous
+                    if current_note != '---' and current_note == prev_note:
+                        row_parts.append('---')  # Replace repeated note with silence
+                    else:
+                        row_parts.append(current_note)
+                        prev_note = current_note  # Update previous note
                 else:
                     row_parts.append('---')  # Fill empty spaces
+                    prev_note = '---'
 
             # Join with spaces and write line
             sheet_line = ' '.join(row_parts) + '\n'
