@@ -2,3 +2,4 @@ opencv-python>=4.8.0
 numpy>=1.24.0
 yt-dlp>=2023.7.6
 moviepy>=1.0.3
+inquirer>=3.1.0

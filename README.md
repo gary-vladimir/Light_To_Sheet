@@ -23,8 +23,11 @@ python main.py
 
 The program will prompt you for:
 1. **Input source** - Choose between:
-   - YouTube URL (automatically downloads and caches)
-   - Local video file path (relative or absolute)
+   - **YouTube URL** - Automatically downloads and caches
+     - Then asks for custom filename (optional, press Enter to use video ID)
+   - **Local video file** - Interactive menu with arrow key navigation
+     - Shows all videos in `downloaded_videos/` folder
+     - Option to browse for files in other locations
 2. **Preview frames** - Save visual analysis frames (y/n, default: yes)
 
 ## How It Works
@@ -94,6 +97,7 @@ Cached YouTube downloads for reuse (not deleted between runs)
 - **Variable Slice Widths**: Defined in `vertical_slices` array to match piano proportions
 - **Brightness Threshold**: 70% - adjustable in `analyze_frame_brightness()` function (line 209)
 - **Frame Rate**: Fixed at 24fps for consistent timing
-- **Video Download**: Uses `yt_dlp` library with caching
+- **Video Download**: Uses `yt_dlp` library with caching and custom filenames
 - **Video Processing**: Uses FFmpeg subprocess for reliable preprocessing
+- **Interactive Menu**: Uses `inquirer` library for arrow-key navigation
 - **Cleanup**: Previous outputs automatically deleted on each run (except cached videos)

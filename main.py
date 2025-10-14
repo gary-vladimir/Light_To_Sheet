@@ -7,7 +7,10 @@ Run as: python main.py
 Workflow:
 1. User is prompted to choose input source:
    - Option 1: YouTube URL (downloads and caches video)
-   - Option 2: Local video file path
+     * Then prompted for custom filename (optional, defaults to video ID)
+   - Option 2: Local video file
+     * Interactive menu shows available videos in downloaded_videos/ (use arrow keys)
+     * Option to browse for files outside downloaded_videos/ folder
 2. User chooses whether to save preview frames (optional visualization)
 3. Video preprocessing using FFmpeg:
    - Resizes to 1848x1080 (stretch to fit, no aspect ratio preservation)
@@ -82,6 +85,7 @@ import os
 import time
 import tempfile
 from datetime import timedelta
+import inquirer
 
 def get_note_pitch_value(note_str):
     """Convert note string (e.g., 'C#4') to a numeric pitch value for sorting"""
@@ -422,6 +426,25 @@ def process_video(video_path, output_file, save_previews=True):
         print(f"Preview frames saved to: {preview_dir}/")
         print(f"Total preview frames: {(frame_number // 6)}")
 
+def get_downloaded_videos():
+    """Get list of video files from downloaded_videos folder"""
+    downloads_dir = 'downloaded_videos'
+
+    if not os.path.exists(downloads_dir):
+        return []
+
+    # Get all video files (mp4, avi, mov, mkv, etc.)
+    video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm']
+    video_files = []
+
+    for file in os.listdir(downloads_dir):
+        if any(file.lower().endswith(ext) for ext in video_extensions):
+            video_files.append(file)
+
+    # Sort alphabetically
+    video_files.sort()
+    return video_files
+
 def cleanup_previous_runs():
     """Clean up files from previous runs (but keep downloaded videos)"""
     # Remove preview frames directory
@@ -473,18 +496,66 @@ def main():
 
         video_source = download_youtube_video(url, custom_title)
     elif choice == '2':
-        file_path = input("Enter video file path (relative or absolute): ").strip()
-        if not file_path:
-            print("Error: No file path provided")
-            return
-        # Handle relative paths
-        if not os.path.isabs(file_path):
-            file_path = os.path.abspath(file_path)
-        if not os.path.exists(file_path):
-            print(f"Error: File not found: {file_path}")
-            return
-        video_source = file_path
-        print(f"Using local file: {video_source}")
+        # Get available videos from downloaded_videos folder
+        available_videos = get_downloaded_videos()
+
+        if available_videos:
+            print(f"\nFound {len(available_videos)} video(s) in downloaded_videos/")
+
+            # Add option to browse for other files
+            choices = available_videos + ["Browse for another file..."]
+
+            questions = [
+                inquirer.List('video',
+                             message="Select a video file (use arrow keys)",
+                             choices=choices,
+                             carousel=True)
+            ]
+
+            try:
+                answers = inquirer.prompt(questions)
+                if not answers:
+                    print("Selection cancelled")
+                    return
+
+                selected = answers['video']
+
+                if selected == "Browse for another file...":
+                    # Fall back to manual input
+                    file_path = input("Enter video file path (relative or absolute): ").strip()
+                    if not file_path:
+                        print("Error: No file path provided")
+                        return
+                    # Handle relative paths
+                    if not os.path.isabs(file_path):
+                        file_path = os.path.abspath(file_path)
+                    if not os.path.exists(file_path):
+                        print(f"Error: File not found: {file_path}")
+                        return
+                    video_source = file_path
+                else:
+                    # Use selected file from downloaded_videos
+                    video_source = os.path.join('downloaded_videos', selected)
+                    print(f"Selected: {video_source}")
+
+            except KeyboardInterrupt:
+                print("\nSelection cancelled")
+                return
+        else:
+            # No videos in downloaded_videos, fall back to manual input
+            print("No videos found in downloaded_videos/ folder")
+            file_path = input("Enter video file path (relative or absolute): ").strip()
+            if not file_path:
+                print("Error: No file path provided")
+                return
+            # Handle relative paths
+            if not os.path.isabs(file_path):
+                file_path = os.path.abspath(file_path)
+            if not os.path.exists(file_path):
+                print(f"Error: File not found: {file_path}")
+                return
+            video_source = file_path
+            print(f"Using local file: {video_source}")
     else:
         print("Invalid choice")
         return
