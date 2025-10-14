@@ -1,36 +1,58 @@
-# Light to Sheet - Video Brightness Analysis Tool
+# Light to Sheet - Piano Note Detection from Video
 """
-This program analyzes YouTube videos to extract brightness patterns across 88 vertical slices.
+This program analyzes videos to detect piano key presses by extracting brightness patterns
+across 88 vertical slices (representing the 88 keys of a piano from A0 to C8).
 Run as: python main.py
 
 Workflow:
-1. User is prompted to enter a YouTube video link
-2. Video is downloaded and resized to 1848x1080 (stretch to fit, no aspect ratio preservation)
-   - Width is 1848px instead of 1920px to ensure integer slice widths (21px each)
-3. Video is converted to 24fps while maintaining original speed/duration
+1. User is prompted to choose input source:
+   - Option 1: YouTube URL (downloads and caches video)
+   - Option 2: Local video file path
+2. User chooses whether to save preview frames (optional visualization)
+3. Video preprocessing using FFmpeg:
+   - Resizes to 1848x1080 (stretch to fit, no aspect ratio preservation)
+   - Width is 1848px to accommodate 88 variable-width slices (ranging from 15-33px)
+   - Converts to 24fps while maintaining original speed/duration
 4. Each frame is processed sequentially:
    a. Convert frame to grayscale
-   b. Divide frame into 88 vertical slices (each 21px wide x 1080px tall)
-   c. For each slice, analyze a 1px tall x 21px wide zone at the top of the frame
-   d. Calculate average brightness (simple mean of pixel values 0-255)
-   e. Store brightness as percentage (0-100) in state array
-5. Output each state array to console and append to output.txt
-6. Wait 1/24 seconds between frames (for real-time processing simulation)
-7. Continue until all frames processed
+   b. Divide frame into 88 vertical slices with variable widths matching piano key proportions
+   c. For each slice, analyze a 1px tall zone at the top of the frame
+   d. Calculate average brightness (mean of pixel values 0-255)
+   e. Convert to binary: 1 if brightness > 70%, else 0 (detects "key pressed" state)
+5. Generate three output files simultaneously:
+   - output.txt: Binary arrays with timestamps
+   - piano.csv: Timestamped data with piano note headers (A0 to C8)
+   - sheet_music.txt: ASCII sheet music notation with note names
+6. Optional: Save visualization frames to preview_frames/ directory (every 6 frames)
+7. Sleep 1/24 seconds between frames (simulates real-time processing)
 
-Output Format:
-- Console: Print each state array as processed
-- output.txt: One state array per line with video timestamp
-  Format: "[23.5, 45.2, 67.8, ...] HH:MM:SS.ffffff"
-  - Timestamps represent frame presentation time in the video
-  - Each line is 1/24 seconds apart (41.67ms intervals)
-  - Brightness values are percentages (0.0 to 100.0)
+Output Files:
+- output.txt: Raw binary arrays per frame
+  Format: "[0, 1, 0, 1, ...] HH:MM:SS.ffffff"
+  - 88 binary values (0 or 1) representing key states
+
+- piano.csv: Structured data with note labels
+  Header: "timestamp,A0,A#0,B0,C1,C#1,...,C8"
+  Data rows: "HH:MM:SS.ffffff,0,1,0,1,..."
+
+- sheet_music.txt: Human-readable sheet music
+  - Multiple rows showing simultaneous notes
+  - Notes sorted by pitch (highest to lowest)
+  - Repeated consecutive notes replaced with "---" for clarity
+  - Format: "C5  D#4 ---  G3  ..." (one column per frame)
+
+- preview_frames/ (optional): Visual analysis frames
+  - Saved every 6 frames (4 per second at 24fps)
+  - Shows brightness bars, slice divisions, and frame metadata
 
 Technical Notes:
-- Use simple/lightweight YouTube download library
+- Uses yt_dlp for YouTube downloads with caching in downloaded_videos/
+- Uses FFmpeg for reliable video preprocessing (avoids H.264 decoding errors)
+- Variable slice widths defined in 'vertical_slices' array (88 values)
+- Piano note mapping: A0 to C8 (88 keys) defined in 'piano_notes' array
+- Binary threshold: brightness > 70% = key pressed (1), else not pressed (0)
 - Brightness = mean(grayscale_pixel_values) / 255 * 100
-- Processing delay enables future real-time state queries
-- Timestamps allow correlation between state arrays and video playback time
+- Previous run outputs are cleaned up automatically (but cached videos are kept)
 """
 
 helper = [28,15,21,15,28,28,15,20,15,21,15,28]
