@@ -129,37 +129,48 @@ def download_youtube_video(url):
     return output_path
 
 def preprocess_video(input_path, output_path):
-    """Resize video to 1848x1080 and convert to 24fps"""
+    """Resize video to 1848x1080 and convert to 24fps using FFmpeg"""
     print("Preprocessing video...")
 
-    cap = cv2.VideoCapture(input_path)
-    original_fps = cap.get(cv2.CAP_PROP_FPS)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    # Use FFmpeg directly for more reliable preprocessing
+    # This avoids frame seeking issues that cause H.264 decoding errors
+    import subprocess
 
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_path, fourcc, 24.0, (1848, 1080))
+    ffmpeg_cmd = [
+        'ffmpeg',
+        '-y',  # Overwrite output file
+        '-i', input_path,
+        '-vf', 'scale=1848:1080:force_original_aspect_ratio=disable,fps=24',  # Resize and set fps
+        '-c:v', 'libx264',  # Use H.264 codec
+        '-preset', 'fast',  # Fast encoding
+        '-crf', '23',  # Quality setting
+        '-an',  # No audio
+        '-loglevel', 'error',  # Only show errors
+        output_path
+    ]
 
-    frame_interval = original_fps / 24.0
-    frame_counter = 0.0
-    processed_frames = 0
+    try:
+        subprocess.run(ffmpeg_cmd, check=True, capture_output=True, text=True)
 
-    while True:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_counter))
-        ret, frame = cap.read()
-        if not ret or frame_counter >= total_frames:
-            break
+        # Verify the output
+        cap = cv2.VideoCapture(output_path)
+        if not cap.isOpened():
+            raise Exception("Failed to open preprocessed video")
 
-        resized = cv2.resize(frame, (1848, 1080), interpolation=cv2.INTER_LINEAR)
-        out.write(resized)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        cap.release()
 
-        frame_counter += frame_interval
-        processed_frames += 1
+        print(f"Video preprocessed: {frame_count} frames at {fps}fps ({width}x{height})")
+        return output_path
 
-    cap.release()
-    out.release()
-
-    print(f"Video preprocessed: {processed_frames} frames at 24fps")
-    return output_path
+    except subprocess.CalledProcessError as e:
+        print(f"FFmpeg error: {e.stderr}")
+        raise Exception(f"Video preprocessing failed: {e.stderr}")
+    except Exception as e:
+        raise Exception(f"Video preprocessing failed: {str(e)}")
 
 def format_timestamp(seconds):
     """Convert seconds to HH:MM:SS.ffffff format"""
@@ -237,9 +248,14 @@ def process_video(video_path, output_file, save_previews=True):
         print("Preview frames will be saved every 6 frames (4 previews per second)")
 
     cap = cv2.VideoCapture(video_path)
+
+    # Disable OpenCV's error messages for better output
+    cv2.setLogLevel(0)
+
     fps = 24.0
     frame_duration = 1.0 / fps
     frame_number = 0
+    failed_frames = 0
 
     # Create CSV file with piano note headers and sheet music file
     piano_csv = 'piano.csv'
@@ -256,6 +272,13 @@ def process_video(video_path, output_file, save_previews=True):
             ret, frame = cap.read()
             if not ret:
                 break
+
+            # Check if frame is valid
+            if frame is None or frame.size == 0:
+                print(f"Warning: Skipping corrupted frame {frame_number}")
+                failed_frames += 1
+                frame_number += 1
+                continue
 
             # Analyze frame with visualization if saving previews
             if save_previews:
@@ -353,6 +376,8 @@ def process_video(video_path, output_file, save_previews=True):
             sheet_f.write(sheet_line)
 
     print(f"\nProcessing complete. Total frames: {frame_number}")
+    if failed_frames > 0:
+        print(f"Warning: {failed_frames} corrupted frame(s) were skipped")
     print(f"Results saved to: {output_file}")
     print(f"Piano CSV saved to: {piano_csv}")
     print(f"Sheet music saved to: {sheet_music_file}")
