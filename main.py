@@ -111,8 +111,13 @@ def format_note_3char(note_str):
     else:
         return '---'  # Fallback for unexpected format
 
-def download_youtube_video(url):
-    """Download YouTube video and save locally for reuse"""
+def download_youtube_video(url, custom_filename=None):
+    """Download YouTube video and save locally for reuse
+
+    Args:
+        url: YouTube video URL
+        custom_filename: Optional custom filename (without extension). If None, uses video ID.
+    """
     print(f"Downloading video from: {url}")
 
     # Create downloads directory if it doesn't exist
@@ -120,17 +125,26 @@ def download_youtube_video(url):
     if not os.path.exists(downloads_dir):
         os.makedirs(downloads_dir)
 
-    # Extract video ID from URL for filename
-    video_id = None
-    if 'youtube.com/watch?v=' in url:
-        video_id = url.split('v=')[1].split('&')[0]
-    elif 'youtu.be/' in url:
-        video_id = url.split('youtu.be/')[1].split('?')[0]
+    # Determine filename
+    if custom_filename:
+        # Sanitize the custom filename (remove invalid characters)
+        sanitized_filename = "".join(c for c in custom_filename if c.isalnum() or c in (' ', '-', '_')).strip()
+        if not sanitized_filename:
+            sanitized_filename = 'video'
+        filename = sanitized_filename
+    else:
+        # Extract video ID from URL for filename
+        video_id = None
+        if 'youtube.com/watch?v=' in url:
+            video_id = url.split('v=')[1].split('&')[0]
+        elif 'youtu.be/' in url:
+            video_id = url.split('youtu.be/')[1].split('?')[0]
 
-    if not video_id:
-        video_id = 'video'
+        if not video_id:
+            video_id = 'video'
+        filename = video_id
 
-    output_path = os.path.join(downloads_dir, f'{video_id}.mp4')
+    output_path = os.path.join(downloads_dir, f'{filename}.mp4')
 
     # Check if already downloaded
     if os.path.exists(output_path):
@@ -451,7 +465,13 @@ def main():
         if not url:
             print("Error: No URL provided")
             return
-        video_source = download_youtube_video(url)
+
+        # Prompt for custom filename
+        custom_title = input("Enter a custom filename for the video (or press Enter to use video ID): ").strip()
+        if not custom_title:
+            custom_title = None
+
+        video_source = download_youtube_video(url, custom_title)
     elif choice == '2':
         file_path = input("Enter video file path (relative or absolute): ").strip()
         if not file_path:
