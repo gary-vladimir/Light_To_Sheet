@@ -1,19 +1,26 @@
-The script shall create an additional sheet music output file like the one described below>
+# Sheet Music Output — Design Spec
 
-the file represents a timeline, the file should expand from left to right. not up to down. 
+> **Status:** Implemented in `src/output_writer.py` (the `OutputWriter._write_sheet_music()` method).
 
-the file is essentially a very simple ascii sheet music representation.
+## Requirements
 
-e.g the final output should ressamble this>
+The script shall create an ASCII sheet music output file (`sheet_music.txt`) with the following properties:
+
+- The file represents a **timeline expanding left to right** (not top to bottom).
+- Each **column** represents one video frame (at 24fps, so column spacing is 1/24 second = ~0.041667s).
+- Each column is sorted in **descending pitch order** (highest notes at top, lowest at bottom). Sorting follows musical pitch rules, not alphabetical order (e.g., C#4 > C4, B3 < C4).
+- Silences (no notes playing) are represented by `---`.
+- Repeated consecutive notes on the same row are replaced with `---` to indicate sustain.
+- All notes are formatted to **exactly 3 characters** for alignment (e.g., `C4 `, `G#3`). This accommodates the longest possible note string like `G#3`.
+
+## Example Output
 
 ```
 C5  D4  F4  B4  --- D4
 D3  --- C4  G#4 --- B3
---- --- --- D4  --- 
+--- --- --- D4  ---
 ```
 
-notice how each column represents a "frame", the first column would be 00:00:00. and the next column would be 00:00:041667.
-
-Each column should be order in acending order, this means that the lowest notes shall go at the bottom in that same column. and the higher pitch notes should go at the top in that same column. Be careful with the ordering feature, we are NOT ordering alphabetically, this is music, remember the rules for a higher pitch note. e.g C#4 is greater than C4. music rules apply.
-
-the spaces without any notes been played (silences) shall also be represented by a "---" string for example. the file should be clearly visibly appealing and easy to understand, everything should go perfectly aligned. to achieve this successfully i recommend that all notes be represented by exacly three characters, this is because of the longest note representation scenario "G#3" example. 
+- Column 1 (`C5`, `D3`): frame at 00:00:00.000000
+- Column 2 (`D4`): frame at 00:00:00.041667
+- And so on.

@@ -8,6 +8,8 @@ __pycache__/
 
 # Output files
 output.txt
+piano.csv
+sheet_music.txt
 preview_frames/
 
 # Downloaded videos

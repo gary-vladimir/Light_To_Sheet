@@ -2,9 +2,19 @@
 
 Detects piano key presses from Synthesia-style videos by analyzing brightness patterns across 88 vertical slices representing the 88 piano keys (A0 to C8). Converts video into binary key states, CSV data, and ASCII sheet music notation.
 
-Available as both a **web app** and a **CLI tool**.
+Available as both a **web app** (`app.py`) and a **CLI tool** (`main.py`). Both share the same processing engine in `src/`.
 
 ## Setup
+
+### System Requirements
+
+These must be installed on the host machine (or are pre-installed in the DevContainer):
+
+- **Python 3.11+**
+- **FFmpeg** — video preprocessing (`brew install ffmpeg` or `apt install ffmpeg`)
+- **Deno >= 2.0** — required by yt-dlp to solve YouTube's JS challenges (`brew install deno` or `curl -fsSL https://deno.land/install.sh | sh`)
+
+### Python Dependencies
 
 ```bash
 # Create virtual environment
@@ -15,9 +25,14 @@ source my_env/bin/activate  # On Windows: my_env\Scripts\activate
 pip install -r requirements.txt
 ```
 
-**System requirements:**
-- **FFmpeg** — video preprocessing (`brew install ffmpeg` or `apt install ffmpeg`)
-- **Deno** — required by yt-dlp for YouTube downloads (`brew install deno` or `curl -fsSL https://deno.land/install.sh | sh`)
+### DevContainer (recommended for consistent environments)
+
+The project includes a `.devcontainer/` configuration that installs Python 3.11, FFmpeg, Deno, and all pip dependencies automatically. Port 5000 is forwarded for the web app.
+
+```bash
+# VS Code: Ctrl+Shift+P → "Dev Containers: Reopen in Container"
+# Then run: python app.py (web) or python main.py (CLI)
+```
 
 ## Usage
 
@@ -27,11 +42,16 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Open [http://localhost:5000](http://localhost:5000) in your browser. From there you can:
+Opens on [http://localhost:5000](http://localhost:5000) by default. The port can be overridden with the `PORT` environment variable:
 
-1. Paste a **YouTube URL** or **upload a video file**
-2. Click **Process Video**
-3. View the ASCII sheet music inline
+```bash
+PORT=8080 python app.py
+```
+
+From the browser:
+1. Paste a **YouTube URL** or **upload a video file** (max 500 MB)
+2. Click **Process Video** and wait (processing is fast — no real-time delay)
+3. View the ASCII sheet music inline in the browser
 4. Download `output.txt`, `piano.csv`, and `sheet_music.txt`
 
 ### CLI
@@ -40,35 +60,65 @@ Open [http://localhost:5000](http://localhost:5000) in your browser. From there 
 python main.py
 ```
 
-The program will prompt you for:
-1. **Input source** — YouTube URL (downloads and caches) or local video file (interactive menu)
-2. **Preview frames** — save visual analysis frames (y/n, default: yes)
+The CLI prompts for:
+1. **Input source** — YouTube URL (downloads and caches in `downloaded_videos/`) or local video file (interactive arrow-key menu via `inquirer`)
+2. **Preview frames** — save annotated visualization frames to `preview_frames/` (y/n, default: yes)
 
-### DevContainer
+The CLI runs in **real-time mode** (1/24 second delay per frame), so processing takes as long as the video's duration. Output files are written to the current directory.
 
-The project includes a `.devcontainer/` configuration for one-command setup:
+## Web App API
 
-```bash
-# Opens in a container with Python 3.11, FFmpeg, and all dependencies pre-installed
-# Port 5000 is forwarded automatically for the web app
+### `GET /`
+Serves the single-page frontend.
+
+### `POST /api/process`
+Accepts multipart form data with either:
+- `youtube_url` (string) — a YouTube video URL, or
+- `video_file` (file) — an uploaded video file
+
+Returns JSON:
+```json
+{
+  "job_id": "uuid",
+  "sheet_music": "G5  --- B4  ...\nD5  --- ---  ...",
+  "files": ["output.txt", "piano.csv", "sheet_music.txt"]
+}
 ```
+
+Each request gets an isolated job directory under the system temp folder (`/tmp/light_to_sheet_jobs/<uuid>/`). The preprocessed and uploaded video files are cleaned up after processing; only the three output files remain for download.
+
+### `GET /api/download/<job_id>/<filename>`
+Serves an output file for download. Only `output.txt`, `piano.csv`, and `sheet_music.txt` are allowed (whitelist). The job ID is validated as a UUID to prevent path traversal.
 
 ## How It Works
 
-1. **Video Preprocessing**
-   - Downloads YouTube video (cached in `downloaded_videos/`) or loads local file
-   - Uses FFmpeg to resize to 1848x1080 (stretches to fit)
-   - Converts to 24fps while maintaining original duration
+### 1. Video Preprocessing (FFmpeg)
+- Downloads YouTube video (cached in `downloaded_videos/`) or accepts a local/uploaded file
+- Uses FFmpeg to resize to **1848x1080** (stretches to fit, no aspect ratio preservation)
+- Converts to **24fps** while maintaining original duration
+- Width of 1848px is intentional — it's the exact sum of the 88 variable-width slices
 
-2. **Frame Analysis**
-   - Divides each frame into 88 vertical slices with variable widths (15-33px)
-   - Slice widths proportionally match piano key layout
-   - Analyzes the top 1px row of each slice for brightness
-   - Converts brightness to binary: **1** if >70% (key pressed), **0** otherwise
+### 2. Frame Analysis (OpenCV)
+- Converts each frame to grayscale
+- Divides into **88 vertical slices** with variable widths (15-33px) matching piano key proportions
+- Samples the **top 1px row** of each slice for average brightness
+- Converts to binary: **1** if brightness > 70% (key pressed), **0** otherwise
+- This works because Synthesia-style videos show bright bars at the top of the frame when keys are pressed
 
-3. **Output Generation**
-   - Generates three synchronized output files
-   - Optional visualization frames saved every 6 frames (4 per second, CLI only)
+### 3. Output Generation
+Three synchronized output files are written per run:
+- `output.txt` — raw binary arrays with timestamps
+- `piano.csv` — CSV with 88 note-name column headers
+- `sheet_music.txt` — ASCII sheet music (columns = time, rows = simultaneous notes)
+
+### Web vs CLI Differences
+
+| Behavior | Web (`app.py`) | CLI (`main.py`) |
+|---|---|---|
+| Processing speed | As fast as possible (`realtime=False`) | Real-time pacing (`realtime=True`) |
+| Preview frames | Disabled | Optional (saves to `preview_frames/`) |
+| Output location | Temp job directory (`/tmp/.../<uuid>/`) | Current working directory |
+| Input method | YouTube URL or file upload via browser | YouTube URL or local file via terminal prompts |
 
 ## Output Files
 
@@ -77,6 +127,8 @@ Raw binary arrays representing key states at each frame:
 ```
 [0, 1, 0, 1, 0, ...88 values...] 00:00:01.041667
 ```
+- 88 binary values (0 = key up, 1 = key down)
+- Timestamp in HH:MM:SS.ffffff format
 
 ### `piano.csv`
 Structured CSV with piano note column headers:
@@ -84,6 +136,8 @@ Structured CSV with piano note column headers:
 timestamp,A0,A#0,B0,C1,C#1,...,C8
 00:00:00.041667,0,1,0,1,0,...,0
 ```
+- First row: timestamp + 88 note labels (A0 through C8)
+- Each data row: timestamp + 88 binary values
 
 ### `sheet_music.txt`
 Human-readable ASCII sheet music notation:
@@ -93,37 +147,69 @@ A#3 ---  F#2 ---  ---  E3  ---  ...
 ---  C2  ---  ---  B1  ---  ---  ...
 ```
 - Each column = one frame (1/24 second)
-- Rows = simultaneous notes (highest pitch at top)
-- `---` = silence or sustained note
+- Rows = simultaneous notes (highest pitch at top, lowest at bottom)
+- All notes are exactly 3 characters wide for alignment (e.g., `C4 `, `C#4`)
+- Repeated consecutive notes on the same row are replaced with `---`
+- Silence = `---`
+
+See `sheet_music_requirements.md` for the original design spec.
 
 ### `preview_frames/` (CLI only)
-Annotated visualization frames with brightness bars, slice divisions, and active key counts.
+Annotated visualization frames showing:
+- Color-coded brightness bars for each of the 88 slices
+- Vertical slice division lines
+- Frame number and timestamp overlay
+- Active key count (e.g., "Active keys: 5 / 88")
+- Saved as JPG images every 6 frames (4 per second at 24fps)
 
 ## Project Structure
 
 ```
 Light_To_Sheet/
-├── app.py               # Web app (Flask)
-├── main.py              # CLI tool
+├── app.py                       # Web app entry point (Flask)
+├── main.py                      # CLI entry point
+├── requirements.txt             # Python dependencies
+├── sheet_music_requirements.md  # Original design spec for ASCII sheet music
+│
 ├── templates/
-│   └── index.html       # Web frontend
+│   └── index.html               # Single-page web frontend (vanilla HTML/JS)
 ├── static/
-│   └── style.css        # Web styling
-├── src/
-│   ├── config.py        # Piano constants, video settings
-│   ├── utils.py         # Timestamp formatting, note helpers
-│   ├── video_downloader.py  # YouTube downloads (yt-dlp)
-│   ├── frame_analyzer.py    # Brightness detection (OpenCV)
-│   ├── output_writer.py     # Multi-format output generation
-│   └── video_processor.py   # FFmpeg preprocessing, frame loop
-├── requirements.txt
-└── .devcontainer/       # Container config for easy deployment
+│   └── style.css                # Web app styling (no frameworks)
+│
+├── src/                         # Shared processing engine
+│   ├── __init__.py              # Package marker (v1.0.0)
+│   ├── config.py                # All constants: slice widths, note mapping, thresholds
+│   ├── utils.py                 # Timestamp formatting, note pitch sorting, file cleanup
+│   ├── video_downloader.py      # YouTube downloads via yt-dlp (requires Deno)
+│   ├── frame_analyzer.py        # Per-frame brightness detection (OpenCV)
+│   ├── output_writer.py         # Multi-format file writer (context manager)
+│   └── video_processor.py       # FFmpeg preprocessing + frame-by-frame loop
+│
+├── downloaded_videos/           # Cached YouTube downloads (git-ignored)
+├── .devcontainer/
+│   ├── Dockerfile               # Python 3.11 + FFmpeg + Deno
+│   └── devcontainer.json        # VS Code / Codespaces config, forwards port 5000
+└── .gitignore
 ```
+
+## Configuration
+
+All tunables live in `src/config.py`:
+
+| Constant | Value | Description |
+|---|---|---|
+| `VIDEO_WIDTH` | 1848 | Must equal sum of `VERTICAL_SLICES` |
+| `VIDEO_HEIGHT` | 1080 | Frame height after preprocessing |
+| `VIDEO_FPS` | 24 | Target frame rate (24 frames = 1 second) |
+| `BRIGHTNESS_THRESHOLD` | 70 | Percentage above which a key is "pressed" |
+| `PREVIEW_SAVE_INTERVAL` | 6 | Save a preview frame every N frames |
+| `VERTICAL_SLICES` | 88 ints | Pixel width of each piano key slice |
+| `PIANO_NOTES` | 88 strings | Note labels from A0 to C8 |
 
 ## Technical Details
 
-- **Piano Key Mapping**: 88 keys from A0 (lowest) to C8 (highest)
-- **Variable Slice Widths**: Defined in `src/config.py` to match piano proportions
-- **Brightness Threshold**: 70% — configurable in `src/config.py`
-- **Frame Rate**: Fixed at 24fps (24 frames = 1 second of music)
-- **Dependencies**: OpenCV, NumPy, yt-dlp, Flask, FFmpeg
+- **Piano Key Mapping**: 88 keys from A0 (lowest) to C8 (highest), generated by `generate_piano_notes()` in `config.py`
+- **Variable Slice Widths**: White keys are 28-33px, black keys are 15-21px, following a repeating 12-note octave pattern
+- **Frame Rate Normalization**: All videos are converted to 24fps during preprocessing, so frame count maps directly to time (24 frames = 1 second)
+- **YouTube Downloads**: Uses `yt-dlp` with Deno as the JS runtime (required since late 2025 due to YouTube's anti-bot challenges). Videos are cached in `downloaded_videos/` to avoid re-downloading
+- **Web App Jobs**: Each web request creates an isolated temp directory (`/tmp/light_to_sheet_jobs/<uuid>/`), processes there, and serves files for download. Preprocessed/uploaded videos are cleaned up after processing
