@@ -141,7 +141,7 @@ def main() -> None:
     try:
         temp_processed = os.path.join(tempfile.gettempdir(), "video_processed.mp4")
         preprocess_video(video_source, temp_processed)
-        process_video(temp_processed, "output.txt", save_previews)
+        process_video(temp_processed, output_dir=".", save_previews=save_previews, realtime=True)
     except Exception as e:
         print(f"Error: {e}")
         return
