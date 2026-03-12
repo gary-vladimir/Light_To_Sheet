@@ -3,11 +3,17 @@ Video download functionality for Light to Sheet.
 
 This module handles downloading videos from YouTube using yt_dlp,
 with caching support to avoid re-downloading the same video.
+
+Requires:
+- yt-dlp >= 2025.11.12
+- Deno >= 2.0 (external JS runtime needed by yt-dlp for YouTube)
 """
 
 from __future__ import annotations
 
 import os
+import shutil
+
 import yt_dlp
 
 
@@ -21,7 +27,11 @@ def download_youtube_video(url: str, custom_filename: str | None = None) -> str:
 
     Returns:
         Path to the downloaded video file.
+
+    Raises:
+        RuntimeError: If Deno is not installed or the download fails.
     """
+    _check_deno()
     print(f"Downloading video from: {url}")
 
     downloads_dir = "downloaded_videos"
@@ -47,6 +57,19 @@ def download_youtube_video(url: str, custom_filename: str | None = None) -> str:
 
     print(f"Video downloaded and saved to: {output_path}")
     return output_path
+
+
+def _check_deno() -> None:
+    """Verify that Deno is installed (required by yt-dlp for YouTube).
+
+    Raises:
+        RuntimeError: If Deno is not found on PATH.
+    """
+    if shutil.which("deno") is None:
+        raise RuntimeError(
+            "Deno is required for YouTube downloads. "
+            "Install it: brew install deno (macOS) or curl -fsSL https://deno.land/install.sh | sh"
+        )
 
 
 def _resolve_filename(url: str, custom_filename: str | None) -> str:

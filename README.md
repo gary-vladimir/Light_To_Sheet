@@ -15,7 +15,9 @@ source my_env/bin/activate  # On Windows: my_env\Scripts\activate
 pip install -r requirements.txt
 ```
 
-**Requires FFmpeg** installed on your system for video preprocessing.
+**System requirements:**
+- **FFmpeg** — video preprocessing (`brew install ffmpeg` or `apt install ffmpeg`)
+- **Deno** — required by yt-dlp for YouTube downloads (`brew install deno` or `curl -fsSL https://deno.land/install.sh | sh`)
 
 ## Usage
 
