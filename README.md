@@ -1,6 +1,8 @@
 # Light to Sheet
 
-Detects piano key presses from videos by analyzing brightness patterns across 88 vertical slices representing the 88 piano keys (A0 to C8). Converts video into binary key states, CSV data, and ASCII sheet music notation.
+Detects piano key presses from Synthesia-style videos by analyzing brightness patterns across 88 vertical slices representing the 88 piano keys (A0 to C8). Converts video into binary key states, CSV data, and ASCII sheet music notation.
+
+Available as both a **web app** and a **CLI tool**.
 
 ## Setup
 
@@ -13,22 +15,41 @@ source my_env/bin/activate  # On Windows: my_env\Scripts\activate
 pip install -r requirements.txt
 ```
 
-**Note:** Requires FFmpeg to be installed on your system for video preprocessing.
+**Requires FFmpeg** installed on your system for video preprocessing.
 
 ## Usage
+
+### Web App
+
+```bash
+python app.py
+```
+
+Open [http://localhost:5000](http://localhost:5000) in your browser. From there you can:
+
+1. Paste a **YouTube URL** or **upload a video file**
+2. Click **Process Video**
+3. View the ASCII sheet music inline
+4. Download `output.txt`, `piano.csv`, and `sheet_music.txt`
+
+### CLI
 
 ```bash
 python main.py
 ```
 
 The program will prompt you for:
-1. **Input source** - Choose between:
-   - **YouTube URL** - Automatically downloads and caches
-     - Then asks for custom filename (optional, press Enter to use video ID)
-   - **Local video file** - Interactive menu with arrow key navigation
-     - Shows all videos in `downloaded_videos/` folder
-     - Option to browse for files in other locations
-2. **Preview frames** - Save visual analysis frames (y/n, default: yes)
+1. **Input source** — YouTube URL (downloads and caches) or local video file (interactive menu)
+2. **Preview frames** — save visual analysis frames (y/n, default: yes)
+
+### DevContainer
+
+The project includes a `.devcontainer/` configuration for one-command setup:
+
+```bash
+# Opens in a container with Python 3.11, FFmpeg, and all dependencies pre-installed
+# Port 5000 is forwarded automatically for the web app
+```
 
 ## How It Works
 
@@ -45,8 +66,7 @@ The program will prompt you for:
 
 3. **Output Generation**
    - Generates three synchronized output files
-   - Optional visualization frames saved every 6 frames (4 per second)
-   - Real-time processing simulation with 1/24 second delays
+   - Optional visualization frames saved every 6 frames (4 per second, CLI only)
 
 ## Output Files
 
@@ -55,17 +75,13 @@ Raw binary arrays representing key states at each frame:
 ```
 [0, 1, 0, 1, 0, ...88 values...] 00:00:01.041667
 ```
-- 88 binary values (0 = key up, 1 = key down)
-- Timestamp in HH:MM:SS.ffffff format
 
 ### `piano.csv`
 Structured CSV with piano note column headers:
 ```
-timestamp,A0,A#0,B0,C1,C#1,D1,D#1,E1,F1,F#1,G1,G#1,A1,...,C8
-00:00:00.041667,0,1,0,1,0,0,1,0,0,0,1,0,0,...,0
+timestamp,A0,A#0,B0,C1,C#1,...,C8
+00:00:00.041667,0,1,0,1,0,...,0
 ```
-- First row: timestamp + 88 note labels (A0 through C8)
-- Each data row: timestamp + 88 binary values
 
 ### `sheet_music.txt`
 Human-readable ASCII sheet music notation:
@@ -74,30 +90,38 @@ C5  D#4 ---  G3  A2  ---  C4  ...
 A#3 ---  F#2 ---  ---  E3  ---  ...
 ---  C2  ---  ---  B1  ---  ---  ...
 ```
-- Each column represents one frame
-- Multiple rows show simultaneous notes (sorted highest to lowest pitch)
-- Active notes shown as 3-character labels (e.g., "C#4", "A0 ", "C8 ")
-- Repeated consecutive notes replaced with "---" for clarity
-- Silence shown as "---"
+- Each column = one frame (1/24 second)
+- Rows = simultaneous notes (highest pitch at top)
+- `---` = silence or sustained note
 
-### `preview_frames/` (optional)
-Visual analysis frames showing:
-- Brightness bars for each slice (color-coded)
-- Vertical slice divisions
-- Frame number and timestamp overlay
-- Brightness statistics (average, min, max)
-- Saved as JPG images every 6 frames
+### `preview_frames/` (CLI only)
+Annotated visualization frames with brightness bars, slice divisions, and active key counts.
 
-### `downloaded_videos/`
-Cached YouTube downloads for reuse (not deleted between runs)
+## Project Structure
+
+```
+Light_To_Sheet/
+├── app.py               # Web app (Flask)
+├── main.py              # CLI tool
+├── templates/
+│   └── index.html       # Web frontend
+├── static/
+│   └── style.css        # Web styling
+├── src/
+│   ├── config.py        # Piano constants, video settings
+│   ├── utils.py         # Timestamp formatting, note helpers
+│   ├── video_downloader.py  # YouTube downloads (yt-dlp)
+│   ├── frame_analyzer.py    # Brightness detection (OpenCV)
+│   ├── output_writer.py     # Multi-format output generation
+│   └── video_processor.py   # FFmpeg preprocessing, frame loop
+├── requirements.txt
+└── .devcontainer/       # Container config for easy deployment
+```
 
 ## Technical Details
 
 - **Piano Key Mapping**: 88 keys from A0 (lowest) to C8 (highest)
-- **Variable Slice Widths**: Defined in `vertical_slices` array to match piano proportions
-- **Brightness Threshold**: 70% - adjustable in `analyze_frame_brightness()` function (line 209)
-- **Frame Rate**: Fixed at 24fps for consistent timing
-- **Video Download**: Uses `yt_dlp` library with caching and custom filenames
-- **Video Processing**: Uses FFmpeg subprocess for reliable preprocessing
-- **Interactive Menu**: Uses `inquirer` library for arrow-key navigation
-- **Cleanup**: Previous outputs automatically deleted on each run (except cached videos)
+- **Variable Slice Widths**: Defined in `src/config.py` to match piano proportions
+- **Brightness Threshold**: 70% — configurable in `src/config.py`
+- **Frame Rate**: Fixed at 24fps (24 frames = 1 second of music)
+- **Dependencies**: OpenCV, NumPy, yt-dlp, Flask, FFmpeg

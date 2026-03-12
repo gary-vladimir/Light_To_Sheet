@@ -79,39 +79,47 @@ def preprocess_video(input_path: str, output_path: str) -> str:
 
 def process_video(
     video_path: str,
-    output_file: str = "output.txt",
+    output_dir: str = ".",
     save_previews: bool = True,
+    realtime: bool = True,
 ) -> None:
     """Process video frames and extract brightness data.
 
     Reads the video frame-by-frame, detects which piano keys are pressed
     via brightness analysis, and writes the results to multiple output files.
-    Processing runs at real-time speed (1/FPS delay per frame) so the
-    standardized frame rate maps directly to note durations.
 
     Args:
         video_path: Path to preprocessed video file.
-        output_file: Path for raw output file.
+        output_dir: Directory where output files are written.
         save_previews: Whether to save annotated preview frames.
+        realtime: If True, sleep 1/FPS per frame (real-time pacing for CLI).
+                  If False, process as fast as possible (web mode).
     """
     print("Processing video frames...")
 
+    output_file = os.path.join(output_dir, "output.txt")
+    piano_csv = os.path.join(output_dir, "piano.csv")
+    sheet_music_file = os.path.join(output_dir, "sheet_music.txt")
+
     preview_dir: str | None = None
     if save_previews:
-        preview_dir = "preview_frames"
+        preview_dir = os.path.join(output_dir, "preview_frames")
         os.makedirs(preview_dir, exist_ok=True)
         print(f"Saving preview frames to: {preview_dir}/")
         print(f"Preview frames saved every {PREVIEW_SAVE_INTERVAL} frames "
               f"({VIDEO_FPS // PREVIEW_SAVE_INTERVAL} previews per second)")
 
     cap = cv2.VideoCapture(video_path)
-    cv2.setLogLevel(0)  # Suppress OpenCV warnings
+
+    # Suppress OpenCV warnings (not available in all builds)
+    if hasattr(cv2, "setLogLevel"):
+        cv2.setLogLevel(0)
 
     frame_duration = 1.0 / VIDEO_FPS
     frame_number = 0
     failed_frames = 0
 
-    with OutputWriter(output_file) as writer:
+    with OutputWriter(output_file, piano_csv, sheet_music_file) as writer:
         while True:
             ret, frame = cap.read()
             if not ret:
@@ -140,8 +148,9 @@ def process_video(
 
             writer.write_frame(brightness_values, timestamp_str)
 
-            # Real-time pacing — ensures 24 frames = 1 second of music
-            time.sleep(frame_duration)
+            if realtime:
+                time.sleep(frame_duration)
+
             frame_number += 1
 
     cap.release()
@@ -151,7 +160,7 @@ def process_video(
     if failed_frames > 0:
         print(f"Warning: {failed_frames} corrupted frame(s) were skipped")
     print(f"Results saved to: {output_file}")
-    print(f"Piano CSV saved to: piano.csv")
+    print(f"Piano CSV saved to: {piano_csv}")
     if preview_dir is not None:
         print(f"Preview frames saved to: {preview_dir}/")
         print(f"Total preview frames: {frame_number // PREVIEW_SAVE_INTERVAL}")
@@ -178,7 +187,7 @@ def _save_preview(
     cv2.putText(vis_frame, info_text, (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
-    # Active key count overlay (not misleading "brightness %" from binary values)
+    # Active key count overlay
     active_count = sum(brightness_values)
     total_keys = len(brightness_values)
     stats_text = f"Active keys: {active_count} / {total_keys}"

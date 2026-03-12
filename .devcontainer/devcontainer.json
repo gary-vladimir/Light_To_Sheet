@@ -1,5 +1,5 @@
 {
-  "name": "Python Video Processing",
+  "name": "Light to Sheet",
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".."
@@ -9,6 +9,7 @@
       "extensions": ["ms-python.python", "ms-python.vscode-pylance"]
     }
   },
-  "remoteUser": "root",
-  "postCreateCommand": "pip install --no-cache-dir -r requirements.txt"
+  "forwardPorts": [5000],
+  "postCreateCommand": "pip install --no-cache-dir -r requirements.txt",
+  "postStartCommand": "echo 'Run: python app.py  (web) or python main.py (CLI)'"
 }
