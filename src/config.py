@@ -55,5 +55,8 @@ BRIGHTNESS_THRESHOLD: int = 70
 # Analysis zone (top row of frame)
 ANALYSIS_ZONE_HEIGHT: int = 1
 
+# Sheet music output
+SHEET_MUSIC_ROWS: int = 10  # Fixed row count — a pianist has 10 fingers
+
 # Preview frame settings
 PREVIEW_SAVE_INTERVAL: int = 6  # Save every 6th frame (4 previews per second at 24fps)

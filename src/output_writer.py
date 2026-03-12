@@ -12,7 +12,7 @@ from __future__ import annotations
 import io
 from types import TracebackType
 
-from .config import PIANO_NOTES
+from .config import PIANO_NOTES, SHEET_MUSIC_ROWS
 from .utils import format_note_3char, get_note_pitch_value
 
 
@@ -97,35 +97,40 @@ class OutputWriter:
             if value == 1
         ]
 
-        # Sort by pitch, highest first
+        # Sort by pitch, highest first — then fix to exactly 10 rows
+        # (a pianist has 10 fingers, so at most 10 simultaneous notes)
         active_notes.sort(key=get_note_pitch_value, reverse=True)
+        column = [format_note_3char(n) for n in active_notes[:SHEET_MUSIC_ROWS]]
 
-        column = [format_note_3char(n) for n in active_notes] if active_notes else ["---"]
+        # Pad to exactly SHEET_MUSIC_ROWS so every column is the same height
+        while len(column) < SHEET_MUSIC_ROWS:
+            column.append("---")
+
         self.sheet_music_columns.append(column)
 
     def _write_sheet_music(self) -> None:
-        """Generate and write ASCII sheet music to file."""
+        """Generate and write ASCII sheet music to file.
+
+        The output has exactly SHEET_MUSIC_ROWS (10) rows — one per finger.
+        Row 1 (top) = highest pitch, row 10 (bottom) = lowest pitch.
+        Each column = one frame. Sustained notes (same note, same row,
+        consecutive columns) are shown as '---'.
+        """
         print("Generating sheet music...")
 
-        max_notes = max(len(col) for col in self.sheet_music_columns)
-
         with open(self.sheet_music_file, "w") as sheet_f:
-            for row_idx in range(max_notes):
+            for row_idx in range(SHEET_MUSIC_ROWS):
                 row_parts: list[str] = []
                 prev_note: str | None = None
 
                 for col in self.sheet_music_columns:
-                    if row_idx < len(col):
-                        current_note = col[row_idx]
-                        # Suppress repeated consecutive notes with '---'
-                        if current_note != "---" and current_note == prev_note:
-                            row_parts.append("---")
-                        else:
-                            row_parts.append(current_note)
-                            prev_note = current_note
-                    else:
+                    current_note = col[row_idx]
+                    # Suppress repeated consecutive notes with '---' (sustain)
+                    if current_note != "---" and current_note == prev_note:
                         row_parts.append("---")
-                        prev_note = "---"
+                    else:
+                        row_parts.append(current_note)
+                        prev_note = current_note
 
                 sheet_f.write(" ".join(row_parts) + "\n")
 
