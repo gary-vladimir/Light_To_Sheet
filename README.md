@@ -147,9 +147,10 @@ A#3 ---  F#2 ---  ---  E3  ---  ...
 ---  C2  ---  ---  B1  ---  ---  ...
 ```
 - Each column = one frame (1/24 second)
+- Exactly 10 rows (one per finger — at most 10 simultaneous notes)
 - Rows = simultaneous notes (highest pitch at top, lowest at bottom)
 - All notes are exactly 3 characters wide for alignment (e.g., `C4 `, `C#4`)
-- Repeated consecutive notes on the same row are replaced with `---`
+- Column-level repeat suppression: if an entire column is identical to the previous one, all rows show `---` (sustain). If any note changed (added/removed), all notes in that column are shown — including sustained ones
 - Silence = `---`
 
 See `sheet_music_requirements.md` for the original design spec.
@@ -202,6 +203,7 @@ All tunables live in `src/config.py`:
 | `VIDEO_HEIGHT` | 1080 | Frame height after preprocessing |
 | `VIDEO_FPS` | 24 | Target frame rate (24 frames = 1 second) |
 | `BRIGHTNESS_THRESHOLD` | 70 | Percentage above which a key is "pressed" |
+| `SHEET_MUSIC_ROWS` | 10 | Fixed row count for sheet music (one per finger) |
 | `PREVIEW_SAVE_INTERVAL` | 6 | Save a preview frame every N frames |
 | `VERTICAL_SLICES` | 88 ints | Pixel width of each piano key slice |
 | `PIANO_NOTES` | 88 strings | Note labels from A0 to C8 |

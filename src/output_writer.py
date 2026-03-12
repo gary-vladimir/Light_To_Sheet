@@ -113,24 +113,37 @@ class OutputWriter:
 
         The output has exactly SHEET_MUSIC_ROWS (10) rows — one per finger.
         Row 1 (top) = highest pitch, row 10 (bottom) = lowest pitch.
-        Each column = one frame. Sustained notes (same note, same row,
-        consecutive columns) are shown as '---'.
+        Each column = one frame.
+
+        Repeat-suppression rule (column-level):
+        - If a column is **identical** to the previous column (every row
+          matches), ALL rows in that column are written as '---' (full sustain).
+        - If a column **differs** from the previous column in ANY row (a new
+          note appeared, a note was released, or notes shifted rows), ALL
+          notes in that column are written out — including sustained notes.
+        This ensures that when a new note is added while other notes are held,
+        the held notes are still visible alongside the new one.
         """
         print("Generating sheet music...")
+
+        # Pre-compute which columns are identical to their predecessor.
+        # column_changed[i] is True when column i differs from column i-1.
+        num_cols = len(self.sheet_music_columns)
+        column_changed: list[bool] = [True] * num_cols  # first column always shown
+        for i in range(1, num_cols):
+            column_changed[i] = self.sheet_music_columns[i] != self.sheet_music_columns[i - 1]
 
         with open(self.sheet_music_file, "w") as sheet_f:
             for row_idx in range(SHEET_MUSIC_ROWS):
                 row_parts: list[str] = []
-                prev_note: str | None = None
 
-                for col in self.sheet_music_columns:
-                    current_note = col[row_idx]
-                    # Suppress repeated consecutive notes with '---' (sustain)
-                    if current_note != "---" and current_note == prev_note:
-                        row_parts.append("---")
+                for col_idx, col in enumerate(self.sheet_music_columns):
+                    if column_changed[col_idx]:
+                        # Column has at least one change — show all notes
+                        row_parts.append(col[row_idx])
                     else:
-                        row_parts.append(current_note)
-                        prev_note = current_note
+                        # Entire column is identical to previous — sustain
+                        row_parts.append("---")
 
                 sheet_f.write(" ".join(row_parts) + "\n")
 
