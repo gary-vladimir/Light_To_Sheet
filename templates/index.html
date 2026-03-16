@@ -56,6 +56,19 @@
 
       <!-- Results -->
       <div id="results" class="hidden">
+        <!-- Frame Preview (independent from sheet music) -->
+        <div id="frame-preview" class="hidden">
+          <h2>Frame Preview</h2>
+          <div class="preview-controls">
+            <button type="button" id="prev-frame" class="preview-btn" disabled>&larr; Prev</button>
+            <span id="frame-counter">Frame 0 / 0</span>
+            <button type="button" id="next-frame" class="preview-btn">Next &rarr;</button>
+          </div>
+          <div class="preview-image-wrapper">
+            <img id="preview-img" alt="Frame preview">
+          </div>
+        </div>
+
         <h2>Sheet Music</h2>
         <div class="sheet-music-wrapper">
           <pre id="sheet-music"></pre>
@@ -80,7 +93,19 @@
     const fileInput = document.getElementById('video-file');
     const fileLabel = document.getElementById('file-label');
 
+    // Frame preview elements
+    const framePreview = document.getElementById('frame-preview');
+    const prevBtn = document.getElementById('prev-frame');
+    const nextBtn = document.getElementById('next-frame');
+    const frameCounter = document.getElementById('frame-counter');
+    const previewImg = document.getElementById('preview-img');
+
     let activeTab = 'youtube';
+
+    // Frame preview state
+    let previewFrames = [];
+    let currentFrameIndex = 0;
+    let currentJobId = null;
 
     // Tab switching
     document.querySelectorAll('.tab').forEach(tab => {
@@ -123,6 +148,7 @@
       loading.classList.remove('hidden');
       error.classList.add('hidden');
       results.classList.add('hidden');
+      framePreview.classList.add('hidden');
 
       try {
         const resp = await fetch('/api/process', { method: 'POST', body: formData });
@@ -132,6 +158,8 @@
           showError(data.error || 'Processing failed.');
           return;
         }
+
+        currentJobId = data.job_id;
 
         // Display sheet music
         sheetMusic.textContent = data.sheet_music;
@@ -147,12 +175,55 @@
           downloads.appendChild(a);
         }
 
+        // Set up frame preview
+        previewFrames = data.preview_frames || [];
+        if (previewFrames.length > 0) {
+          currentFrameIndex = 0;
+          showFrame(0);
+          framePreview.classList.remove('hidden');
+        } else {
+          framePreview.classList.add('hidden');
+        }
+
         results.classList.remove('hidden');
       } catch (err) {
         showError('Request failed. Please try again.');
       } finally {
         loading.classList.add('hidden');
         submitBtn.disabled = false;
+      }
+    });
+
+    // --- Frame preview navigation ---
+
+    function showFrame(index) {
+      if (index < 0 || index >= previewFrames.length) return;
+      currentFrameIndex = index;
+      const filename = previewFrames[index];
+      previewImg.src = '/api/preview/' + currentJobId + '/' + filename;
+
+      // Extract original frame number from filename (e.g., "frame_000042.jpg" → 42)
+      const match = filename.match(/frame_(\d+)\.jpg/);
+      const frameNum = match ? parseInt(match[1], 10) : index;
+      frameCounter.textContent = 'Frame ' + frameNum + '  (' + (index + 1) + ' / ' + previewFrames.length + ')';
+
+      // Enable/disable buttons at boundaries
+      prevBtn.disabled = (index === 0);
+      nextBtn.disabled = (index === previewFrames.length - 1);
+    }
+
+    prevBtn.addEventListener('click', () => showFrame(currentFrameIndex - 1));
+    nextBtn.addEventListener('click', () => showFrame(currentFrameIndex + 1));
+
+    // Keyboard arrow navigation (only when preview is visible)
+    document.addEventListener('keydown', (e) => {
+      if (framePreview.classList.contains('hidden')) return;
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        showFrame(currentFrameIndex - 1);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        showFrame(currentFrameIndex + 1);
       }
     });
 

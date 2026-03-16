@@ -11,6 +11,7 @@ Run as: python app.py
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
 import uuid
@@ -54,7 +55,7 @@ def api_process():
         process_video(
             processed_path,
             output_dir=job_dir,
-            save_previews=False,
+            save_previews=True,
             realtime=False,
         )
     except Exception as e:
@@ -76,10 +77,19 @@ def api_process():
         with open(sheet_music_path) as f:
             sheet_music = f.read()
 
+    # List saved preview frames (sorted by filename → chronological order)
+    preview_frames: list[str] = []
+    preview_dir = os.path.join(job_dir, "preview_frames")
+    if os.path.isdir(preview_dir):
+        preview_frames = sorted(
+            f for f in os.listdir(preview_dir) if f.endswith(".jpg")
+        )
+
     return jsonify({
         "job_id": job_id,
         "sheet_music": sheet_music,
         "files": list(ALLOWED_OUTPUT_FILES),
+        "preview_frames": preview_frames,
     })
 
 
@@ -101,6 +111,26 @@ def api_download(job_id: str, filename: str):
         return jsonify({"error": "File not found"}), 404
 
     return send_file(file_path, as_attachment=True, download_name=filename)
+
+
+@app.route("/api/preview/<job_id>/<filename>")
+def api_preview(job_id: str, filename: str):
+    """Serve a preview frame image."""
+    # Validate job_id is a UUID
+    try:
+        uuid.UUID(job_id)
+    except ValueError:
+        return jsonify({"error": "Invalid job ID"}), 400
+
+    # Validate filename matches expected pattern (prevent path traversal)
+    if not re.fullmatch(r"frame_\d{6}\.jpg", filename):
+        return jsonify({"error": "Invalid filename"}), 400
+
+    file_path = os.path.join(JOBS_DIR, job_id, "preview_frames", filename)
+    if not os.path.exists(file_path):
+        return jsonify({"error": "File not found"}), 404
+
+    return send_file(file_path, mimetype="image/jpeg")
 
 
 def _get_input_video(req, job_dir: str) -> str:
