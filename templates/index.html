@@ -7,82 +7,203 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  <!-- Animated background effects -->
+  <div class="bg-effects">
+    <div class="bg-orb bg-orb--1"></div>
+    <div class="bg-orb bg-orb--2"></div>
+    <div class="bg-orb bg-orb--3"></div>
+  </div>
+  <div class="bg-grid"></div>
+
   <div class="container">
     <header>
+      <!-- Animated Logo Icon -->
+      <div class="logo-icon">
+        <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+          <defs>
+            <linearGradient id="logoGrad" x1="0" y1="0" x2="56" y2="56">
+              <stop offset="0%" stop-color="#a29bfe"/>
+              <stop offset="100%" stop-color="#fd79a8"/>
+            </linearGradient>
+          </defs>
+          <rect x="4" y="4" width="48" height="48" rx="14" fill="none" stroke="url(#logoGrad)" stroke-width="2" opacity="0.3"/>
+          <!-- Music note shape -->
+          <ellipse cx="22" cy="36" rx="5" ry="4" fill="url(#logoGrad)" opacity="0.9"/>
+          <rect x="26.5" y="16" width="2.5" height="21" rx="1.25" fill="url(#logoGrad)" opacity="0.9"/>
+          <ellipse cx="34" cy="33" rx="5" ry="4" fill="url(#logoGrad)" opacity="0.6"/>
+          <rect x="38.5" y="14" width="2.5" height="20" rx="1.25" fill="url(#logoGrad)" opacity="0.6"/>
+          <!-- Beam connecting notes -->
+          <rect x="27" y="14" width="14" height="3" rx="1.5" fill="url(#logoGrad)" opacity="0.75"/>
+        </svg>
+      </div>
+
       <h1>Light to Sheet</h1>
       <p class="subtitle">Convert Synthesia piano videos to sheet music</p>
+
+      <!-- Animated mini piano visualization -->
+      <div class="piano-visual">
+        <svg id="piano-svg" width="320" height="40" viewBox="0 0 320 40">
+          <!-- White keys -->
+          <rect class="piano-key-white" x="1" y="0" width="21" height="38" rx="2"/>
+          <rect class="piano-key-white" x="24" y="0" width="21" height="38" rx="2"/>
+          <rect class="piano-key-white" x="47" y="0" width="21" height="38" rx="2"/>
+          <rect class="piano-key-white" x="70" y="0" width="21" height="38" rx="2"/>
+          <rect class="piano-key-white" x="93" y="0" width="21" height="38" rx="2"/>
+          <rect class="piano-key-white" x="116" y="0" width="21" height="38" rx="2"/>
+          <rect class="piano-key-white" x="139" y="0" width="21" height="38" rx="2"/>
+          <rect class="piano-key-white" x="162" y="0" width="21" height="38" rx="2"/>
+          <rect class="piano-key-white" x="185" y="0" width="21" height="38" rx="2"/>
+          <rect class="piano-key-white" x="208" y="0" width="21" height="38" rx="2"/>
+          <rect class="piano-key-white" x="231" y="0" width="21" height="38" rx="2"/>
+          <rect class="piano-key-white" x="254" y="0" width="21" height="38" rx="2"/>
+          <rect class="piano-key-white" x="277" y="0" width="21" height="38" rx="2"/>
+          <rect class="piano-key-white" x="300" y="0" width="19" height="38" rx="2"/>
+          <!-- Black keys -->
+          <rect class="piano-key-black" x="16" y="0" width="14" height="24" rx="2"/>
+          <rect class="piano-key-black" x="39" y="0" width="14" height="24" rx="2"/>
+          <rect class="piano-key-black" x="85" y="0" width="14" height="24" rx="2"/>
+          <rect class="piano-key-black" x="108" y="0" width="14" height="24" rx="2"/>
+          <rect class="piano-key-black" x="131" y="0" width="14" height="24" rx="2"/>
+          <rect class="piano-key-black" x="177" y="0" width="14" height="24" rx="2"/>
+          <rect class="piano-key-black" x="200" y="0" width="14" height="24" rx="2"/>
+          <rect class="piano-key-black" x="246" y="0" width="14" height="24" rx="2"/>
+          <rect class="piano-key-black" x="269" y="0" width="14" height="24" rx="2"/>
+          <rect class="piano-key-black" x="292" y="0" width="14" height="24" rx="2"/>
+        </svg>
+      </div>
     </header>
 
     <main>
-      <!-- Input Tabs -->
-      <div class="tabs">
-        <button class="tab active" data-tab="youtube">YouTube URL</button>
-        <button class="tab" data-tab="upload">Upload Video</button>
+      <!-- Input Card -->
+      <div class="card" id="input-card">
+        <!-- Tabs -->
+        <div class="tabs">
+          <button class="tab active" data-tab="youtube">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19.13C5.12 19.56 12 19.56 12 19.56s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg>
+            YouTube URL
+          </button>
+          <button class="tab" data-tab="upload">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload Video
+          </button>
+        </div>
+
+        <form id="process-form">
+          <!-- YouTube URL input -->
+          <div class="tab-content active" id="tab-youtube">
+            <input
+              type="url"
+              name="youtube_url"
+              id="youtube-url"
+              placeholder="https://www.youtube.com/watch?v=..."
+              autocomplete="off"
+            >
+          </div>
+
+          <!-- File upload input -->
+          <div class="tab-content" id="tab-upload">
+            <label class="file-upload" id="file-label">
+              <input type="file" name="video_file" id="video-file" accept="video/*">
+              <div class="upload-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </div>
+              <span>Choose a video file</span>
+              <span class="file-hint">MP4, AVI, MOV, MKV, WebM — up to 500 MB</span>
+            </label>
+          </div>
+
+          <button type="submit" id="submit-btn">
+            <span>Process Video</span>
+            <span class="btn-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </span>
+          </button>
+        </form>
       </div>
-
-      <form id="process-form">
-        <!-- YouTube URL input -->
-        <div class="tab-content active" id="tab-youtube">
-          <input
-            type="url"
-            name="youtube_url"
-            id="youtube-url"
-            placeholder="https://www.youtube.com/watch?v=..."
-            autocomplete="off"
-          >
-        </div>
-
-        <!-- File upload input -->
-        <div class="tab-content" id="tab-upload">
-          <label class="file-upload" id="file-label">
-            <input type="file" name="video_file" id="video-file" accept="video/*">
-            <span>Choose a video file</span>
-          </label>
-        </div>
-
-        <button type="submit" id="submit-btn">Process Video</button>
-      </form>
 
       <!-- Loading state -->
       <div id="loading" class="hidden">
-        <div class="spinner"></div>
-        <p>Processing video... this may take a moment.</p>
+        <div class="loading-content">
+          <div class="waveform-loader">
+            <div class="waveform-bar"></div>
+            <div class="waveform-bar"></div>
+            <div class="waveform-bar"></div>
+            <div class="waveform-bar"></div>
+            <div class="waveform-bar"></div>
+            <div class="waveform-bar"></div>
+            <div class="waveform-bar"></div>
+          </div>
+          <p class="loading-text" id="loading-message">Processing video<span>.</span><span>.</span><span>.</span></p>
+          <p style="color:var(--text-muted); font-size:0.82rem;">This may take a few minutes for longer videos</p>
+        </div>
       </div>
 
       <!-- Error message -->
       <div id="error" class="hidden">
+        <span class="error-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        </span>
         <p id="error-text"></p>
       </div>
 
       <!-- Results -->
       <div id="results" class="hidden">
-        <!-- Frame Preview (independent from sheet music) -->
+        <!-- Frame Preview -->
         <div id="frame-preview" class="hidden">
-          <h2>Frame Preview</h2>
+          <div class="section-header">
+            <div class="section-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/></svg>
+            </div>
+            <h2>Frame Preview</h2>
+          </div>
           <div class="preview-controls">
-            <button type="button" id="prev-frame" class="preview-btn" disabled>&larr; Prev</button>
+            <button type="button" id="prev-frame" class="preview-btn" disabled>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              Prev
+            </button>
             <span id="frame-counter">Frame 0 / 0</span>
-            <button type="button" id="next-frame" class="preview-btn">Next &rarr;</button>
+            <button type="button" id="next-frame" class="preview-btn">
+              Next
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
           </div>
           <div class="preview-image-wrapper">
             <img id="preview-img" alt="Frame preview">
           </div>
         </div>
 
-        <h2>Sheet Music</h2>
+        <!-- Sheet Music -->
+        <div class="section-header">
+          <div class="section-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          </div>
+          <h2>Sheet Music</h2>
+        </div>
         <div class="sheet-music-wrapper">
           <pre id="sheet-music"></pre>
         </div>
 
-        <h2>Download Files</h2>
-        <div class="downloads" id="downloads"></div>
+        <!-- Downloads -->
+        <div class="section-header">
+          <div class="section-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </div>
+          <h2>Download Files</h2>
+        </div>
+        <div class="downloads stagger" id="downloads"></div>
       </div>
     </main>
+
+    <div class="footer">
+      Built with OpenCV, FFmpeg & Flask
+    </div>
   </div>
 
   <script>
+    // ---- DOM refs ----
     const form = document.getElementById('process-form');
     const submitBtn = document.getElementById('submit-btn');
+    const inputCard = document.getElementById('input-card');
     const loading = document.getElementById('loading');
     const error = document.getElementById('error');
     const errorText = document.getElementById('error-text');
@@ -93,7 +214,6 @@
     const fileInput = document.getElementById('video-file');
     const fileLabel = document.getElementById('file-label');
 
-    // Frame preview elements
     const framePreview = document.getElementById('frame-preview');
     const prevBtn = document.getElementById('prev-frame');
     const nextBtn = document.getElementById('next-frame');
@@ -101,13 +221,30 @@
     const previewImg = document.getElementById('preview-img');
 
     let activeTab = 'youtube';
-
-    // Frame preview state
     let previewFrames = [];
     let currentFrameIndex = 0;
     let currentJobId = null;
 
-    // Tab switching
+    // ---- Animated piano keys (header decoration) ----
+    const pianoKeys = document.querySelectorAll('#piano-svg rect');
+    let pianoInterval;
+
+    function animatePianoKeys() {
+      // Light up random keys
+      pianoKeys.forEach(key => key.classList.remove('active'));
+      const count = 2 + Math.floor(Math.random() * 3);
+      const indices = [];
+      while (indices.length < count) {
+        const i = Math.floor(Math.random() * pianoKeys.length);
+        if (!indices.includes(i)) indices.push(i);
+      }
+      indices.forEach(i => pianoKeys[i].classList.add('active'));
+    }
+
+    pianoInterval = setInterval(animatePianoKeys, 900);
+    animatePianoKeys(); // Start immediately
+
+    // ---- Tab switching ----
     document.querySelectorAll('.tab').forEach(tab => {
       tab.addEventListener('click', () => {
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -119,7 +256,7 @@
       });
     });
 
-    // Show selected filename
+    // ---- Show selected filename ----
     fileInput.addEventListener('change', () => {
       const name = fileInput.files[0]?.name;
       if (name) {
@@ -127,7 +264,27 @@
       }
     });
 
-    // Form submission
+    // ---- Loading messages cycle ----
+    const loadingMessages = [
+      'Processing video',
+      'Preprocessing with FFmpeg',
+      'Calibrating background',
+      'Analyzing frames',
+      'Detecting key presses',
+      'Removing spillover',
+      'Generating sheet music',
+      'Almost there',
+    ];
+    let msgIndex = 0;
+    let msgInterval;
+
+    function cycleLoadingMessage() {
+      const msgEl = document.getElementById('loading-message');
+      msgIndex = (msgIndex + 1) % loadingMessages.length;
+      msgEl.innerHTML = loadingMessages[msgIndex] + '<span>.</span><span>.</span><span>.</span>';
+    }
+
+    // ---- Form submission ----
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
 
@@ -150,6 +307,10 @@
       results.classList.add('hidden');
       framePreview.classList.add('hidden');
 
+      // Start cycling loading messages
+      msgIndex = 0;
+      msgInterval = setInterval(cycleLoadingMessage, 3500);
+
       try {
         const resp = await fetch('/api/process', { method: 'POST', body: formData });
         const data = await resp.json();
@@ -164,14 +325,19 @@
         // Display sheet music
         sheetMusic.textContent = data.sheet_music;
 
-        // Build download buttons
+        // Build download buttons with icons
         downloads.innerHTML = '';
+        const fileIcons = {
+          'output.txt': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+          'piano.csv': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>',
+          'sheet_music.txt': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
+        };
         for (const filename of data.files) {
           const a = document.createElement('a');
           a.href = '/api/download/' + data.job_id + '/' + filename;
           a.className = 'download-btn';
           a.download = filename;
-          a.textContent = filename;
+          a.innerHTML = (fileIcons[filename] || '') + ' ' + filename;
           downloads.appendChild(a);
         }
 
@@ -186,28 +352,32 @@
         }
 
         results.classList.remove('hidden');
+        results.classList.add('results-enter');
+
+        // Stop piano animation once results are in
+        clearInterval(pianoInterval);
+        pianoKeys.forEach(key => key.classList.remove('active'));
+
       } catch (err) {
         showError('Request failed. Please try again.');
       } finally {
         loading.classList.add('hidden');
         submitBtn.disabled = false;
+        clearInterval(msgInterval);
       }
     });
 
-    // --- Frame preview navigation ---
-
+    // ---- Frame preview navigation ----
     function showFrame(index) {
       if (index < 0 || index >= previewFrames.length) return;
       currentFrameIndex = index;
       const filename = previewFrames[index];
       previewImg.src = '/api/preview/' + currentJobId + '/' + filename;
 
-      // Extract original frame number from filename (e.g., "frame_000042.jpg" → 42)
       const match = filename.match(/frame_(\d+)\.jpg/);
       const frameNum = match ? parseInt(match[1], 10) : index;
       frameCounter.textContent = 'Frame ' + frameNum + '  (' + (index + 1) + ' / ' + previewFrames.length + ')';
 
-      // Enable/disable buttons at boundaries
       prevBtn.disabled = (index === 0);
       nextBtn.disabled = (index === previewFrames.length - 1);
     }
@@ -215,7 +385,6 @@
     prevBtn.addEventListener('click', () => showFrame(currentFrameIndex - 1));
     nextBtn.addEventListener('click', () => showFrame(currentFrameIndex + 1));
 
-    // Keyboard arrow navigation (only when preview is visible)
     document.addEventListener('keydown', (e) => {
       if (framePreview.classList.contains('hidden')) return;
       if (e.key === 'ArrowLeft') {
@@ -232,6 +401,7 @@
       error.classList.remove('hidden');
       loading.classList.add('hidden');
       submitBtn.disabled = false;
+      clearInterval(msgInterval);
     }
   </script>
 </body>
