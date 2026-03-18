@@ -47,10 +47,12 @@ VIDEO_FPS: int = 24
 # background color.  The median BGR across these frames is the reference.
 CALIBRATION_FRAMES: int = 48  # 2 seconds at 24fps
 
-# Detection threshold: minimum Euclidean distance (in BGR space) between a
-# key's current color and its calibrated background to consider it "pressed".
-# Scale: 0 (identical to background) – ~441 (black ↔ white).
-# Typical noise is 5–15; dim beams start around 30; bright beams reach 200+.
+# Detection threshold (adaptive): minimum Euclidean BGR distance ABOVE the
+# per-frame median to consider a key "pressed".  The per-frame median tracks
+# background drift (title screens, lighting changes, compression noise), so
+# this value is the margin above the current noise floor — not an absolute
+# distance.  Typical noise spread is 5–15 around the median; dim beams
+# start around 30 above the median; bright beams reach 200+ above.
 COLOR_DISTANCE_THRESHOLD: float = 30.0
 
 # ---------------------------------------------------------------------------

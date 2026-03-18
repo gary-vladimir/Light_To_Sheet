@@ -9,7 +9,7 @@ false positives caused by overlapping light bars in Synthesia-style videos.
 Detection pipeline:
   0. calibrate_background() — estimate per-key background BGR from first N frames
   1. Per-frame: compute Euclidean BGR distance from background for each key
-  2. Spillover correction on black keys (same ratio logic, using distances)
+  2. Spillover correction on all keys (ratio-based neighbor comparison)
 """
 
 from __future__ import annotations
@@ -95,9 +95,10 @@ def analyze_frame_brightness(
 
     Phase 1 — Sample all 88 keys at their narrow center strips in BGR.
               Compute Euclidean distance from the calibrated background.
-    Phase 2 — Spillover correction: for each detected black key, check if
-              its distance is significantly lower than a pressed white
-              neighbor.  If so, the detection is spillover — remove it.
+    Phase 2 — Spillover correction: for each detected key, check if its
+              distance is significantly lower than a nearby pressed
+              neighbor (±2 positions).  If so, the detection is light
+              spillover from the brighter neighbor — remove it.
 
     Args:
         frame: BGR video frame (numpy array).
@@ -113,7 +114,6 @@ def analyze_frame_brightness(
     # Phase 1: color-distance sampling (all 88 keys)
     # ------------------------------------------------------------------
     raw_distances: list[float] = []
-    brightness_values: list[int] = []
 
     for idx, geo in enumerate(KEY_GEOMETRY):
         region = frame[0:1, geo["x_start"]:geo["x_end"]]  # (1, W, 3) BGR
@@ -121,32 +121,51 @@ def analyze_frame_brightness(
 
         distance = float(np.linalg.norm(avg_bgr - background[idx]))
         raw_distances.append(distance)
-        brightness_values.append(1 if distance > COLOR_DISTANCE_THRESHOLD else 0)
+
+    # Adaptive threshold: use the per-frame median distance as a baseline.
+    # The median tracks background brightness drift (title screens, lighting
+    # changes, compression noise) because the majority of keys are unpressed
+    # at any given frame.  A key is "pressed" only if its distance exceeds
+    # the current baseline by at least COLOR_DISTANCE_THRESHOLD.
+    median_distance = float(np.median(raw_distances))
+    adaptive_threshold = median_distance + COLOR_DISTANCE_THRESHOLD
+
+    brightness_values: list[int] = [
+        1 if d > adaptive_threshold else 0 for d in raw_distances
+    ]
 
     # ------------------------------------------------------------------
-    # Phase 2: spillover correction (black keys only)
+    # Phase 2: spillover correction (all keys)
     # ------------------------------------------------------------------
+    # For every detected key, check nearby keys (within ±2 positions in
+    # PIANO_NOTES order ≈ physically adjacent).  If a neighbor has a
+    # substantially higher color distance, this key's detection is likely
+    # light spillover from the brighter neighbor rather than a genuine
+    # press.
+    #
+    # The SPILLOVER_RATIO (0.80) preserves chords: two genuinely pressed
+    # keys have similar distances (ratio ~1.0 > 0.80), while spillover
+    # typically produces only 20–60% of the source's distance.
     removed_by_spillover: list[bool] = [False] * 88
 
-    for i, geo in enumerate(KEY_GEOMETRY):
-        if not geo["is_black"]:
-            continue
+    for i in range(88):
         if brightness_values[i] == 0:
             continue
 
-        # Find the largest distance among pressed white neighbors
-        max_white_dist = 0.0
-        for neighbor_idx in (geo["left_white_idx"], geo["right_white_idx"]):
-            if neighbor_idx is not None and brightness_values[neighbor_idx] == 1:
-                if raw_distances[neighbor_idx] > max_white_dist:
-                    max_white_dist = raw_distances[neighbor_idx]
+        # Find the largest distance among detected neighbors within ±2
+        max_neighbor_dist = 0.0
+        for offset in (-2, -1, 1, 2):
+            ni = i + offset
+            if 0 <= ni < 88 and brightness_values[ni] == 1:
+                if raw_distances[ni] > max_neighbor_dist:
+                    max_neighbor_dist = raw_distances[ni]
 
-        # If no white neighbor is pressed, this black key is genuine — skip
-        if max_white_dist == 0.0:
+        # No pressed neighbor → this key is genuine, skip
+        if max_neighbor_dist == 0.0:
             continue
 
-        # If the black key's distance is much lower than the neighbor, spillover
-        if raw_distances[i] < max_white_dist * SPILLOVER_RATIO:
+        # If this key's distance is much lower than its neighbor → spillover
+        if raw_distances[i] < max_neighbor_dist * SPILLOVER_RATIO:
             brightness_values[i] = 0
             removed_by_spillover[i] = True
 
