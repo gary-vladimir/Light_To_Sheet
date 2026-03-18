@@ -21,7 +21,7 @@ from .config import (
     VIDEO_HEIGHT,
     VIDEO_WIDTH,
 )
-from .frame_analyzer import analyze_frame_brightness
+from .frame_analyzer import analyze_frame_brightness, calibrate_background
 from .output_writer import OutputWriter
 from .utils import format_timestamp
 
@@ -97,6 +97,9 @@ def process_video(
     """
     print("Processing video frames...")
 
+    # Phase 0: calibrate per-key background colors from first N frames
+    background = calibrate_background(video_path)
+
     output_file = os.path.join(output_dir, "output.txt")
     piano_csv = os.path.join(output_dir, "piano.csv")
     sheet_music_file = os.path.join(output_dir, "sheet_music.txt")
@@ -136,10 +139,10 @@ def process_video(
 
             # Analyze frame (with or without visualization)
             if preview_dir is not None:
-                brightness_values, vis_frame = analyze_frame_brightness(frame, visualize=True)
+                brightness_values, vis_frame = analyze_frame_brightness(frame, background, visualize=True)
                 _save_preview(vis_frame, preview_dir, frame_number, timestamp_str, brightness_values)
             else:
-                brightness_values = analyze_frame_brightness(frame)
+                brightness_values = analyze_frame_brightness(frame, background)
 
             # Console progress (once per second)
             if frame_number % VIDEO_FPS == 0:
