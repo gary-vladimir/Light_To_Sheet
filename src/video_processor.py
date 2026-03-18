@@ -139,8 +139,9 @@ def process_video(
 
             # Analyze frame (with or without visualization)
             if preview_dir is not None:
-                brightness_values, vis_frame = analyze_frame_brightness(frame, background, visualize=True)
-                _save_preview(vis_frame, preview_dir, frame_number, timestamp_str, brightness_values)
+                brightness_values, vis_frame, frame_meta = analyze_frame_brightness(frame, background, visualize=True)
+                _save_preview(vis_frame, preview_dir, frame_number, timestamp_str,
+                              brightness_values, frame_meta)
             else:
                 brightness_values = analyze_frame_brightness(frame, background)
 
@@ -175,6 +176,7 @@ def _save_preview(
     frame_number: int,
     timestamp_str: str,
     brightness_values: list[int],
+    frame_meta: dict,
 ) -> None:
     """Add text overlays to a visualization frame and save it (every N frames).
 
@@ -184,18 +186,38 @@ def _save_preview(
         frame_number: Current frame index.
         timestamp_str: Formatted timestamp for the frame.
         brightness_values: Binary key states (used for active-key count).
+        frame_meta: Detection metadata (threshold, median, active notes, etc.).
     """
-    # Frame info overlay
-    info_text = f"Frame: {frame_number} | Time: {timestamp_str}"
-    cv2.putText(vis_frame, info_text, (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-
-    # Active key count overlay
     active_count = sum(brightness_values)
-    total_keys = len(brightness_values)
-    stats_text = f"Active keys: {active_count} / {total_keys}"
-    cv2.putText(vis_frame, stats_text, (10, 60),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+    threshold = frame_meta["adaptive_threshold"]
+    median = frame_meta["median_distance"]
+    active_notes = frame_meta["active_notes"]
+    spillover_count = sum(frame_meta["removed_by_spillover"])
+
+    # Dark background for text readability
+    panel_height = 100 if spillover_count == 0 else 118
+    cv2.rectangle(vis_frame, (0, 0), (520, panel_height), (0, 0, 0), -1)
+
+    # Line 1: frame info
+    cv2.putText(vis_frame, f"Frame: {frame_number} | Time: {timestamp_str}",
+                (10, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
+    # Line 2: detection stats
+    cv2.putText(vis_frame,
+                f"Active: {active_count}/88 | Threshold: {threshold:.0f} | Median: {median:.0f}",
+                (10, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1)
+
+    # Line 3: active note names
+    notes_str = " ".join(active_notes[:12])
+    if len(active_notes) > 12:
+        notes_str += " ..."
+    cv2.putText(vis_frame, f"Notes: {notes_str}",
+                (10, 72), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (0, 230, 50), 1)
+
+    # Line 4: spillover count (only if > 0)
+    if spillover_count > 0:
+        cv2.putText(vis_frame, f"Spillover removed: {spillover_count}",
+                    (10, 96), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 140, 255), 1)
 
     # Save every Nth frame
     if frame_number % PREVIEW_SAVE_INTERVAL == 0:

@@ -31,10 +31,6 @@ from .config import (
 )
 
 
-# Maximum possible Euclidean distance in BGR space (black ↔ white).
-_MAX_COLOR_DISTANCE: float = float(np.linalg.norm([255, 255, 255]))  # ~441.67
-
-
 def calibrate_background(video_path: str) -> NDArray[np.float32]:
     """Estimate per-key background colors from the first N frames.
 
@@ -108,7 +104,9 @@ def analyze_frame_brightness(
 
     Returns:
         If visualize is False: list of 88 binary values (0 or 1).
-        If visualize is True: tuple of (binary values, annotated frame).
+        If visualize is True: tuple of (binary values, annotated frame,
+        metadata dict with keys ``adaptive_threshold``, ``median_distance``,
+        ``removed_by_spillover``, ``active_notes``).
     """
     # ------------------------------------------------------------------
     # Phase 1: color-distance sampling (all 88 keys)
@@ -182,18 +180,41 @@ def analyze_frame_brightness(
             x = int(round(w * WHITE_KEY_WIDTH))
             cv2.line(vis_frame, (x, 0), (x, 50), (100, 100, 100), 1)
 
+        # Dynamic bar scale: threshold at ~25%, genuine beams at 70-100%
+        bar_scale = max(adaptive_threshold * 4, 150.0)
+
         for i, geo in enumerate(KEY_GEOMETRY):
             _draw_key_visualization(
                 vis_frame, i,
                 geo["x_start"], geo["x_end"],
                 raw_distances[i],
                 geo["is_black"],
+                brightness_values[i] == 1,
                 removed_by_spillover[i],
+                bar_scale,
             )
 
-        return brightness_values, vis_frame
+        _draw_threshold_lines(vis_frame, adaptive_threshold,
+                              median_distance, bar_scale)
+
+        active_notes = [PIANO_NOTES[i] for i in range(88)
+                        if brightness_values[i] == 1]
+        frame_meta = {
+            "adaptive_threshold": adaptive_threshold,
+            "median_distance": median_distance,
+            "removed_by_spillover": removed_by_spillover,
+            "active_notes": active_notes,
+        }
+        return brightness_values, vis_frame, frame_meta
 
     return brightness_values
+
+
+# C-note indices for fixed octave markers (C1–C8).
+_C_NOTE_INDICES: set[int] = {3, 15, 27, 39, 51, 63, 75, 87}
+
+# Bar chart zone height in pixels (bottom of frame).
+_BAR_ZONE_HEIGHT: int = 150
 
 
 def _draw_key_visualization(
@@ -203,7 +224,9 @@ def _draw_key_visualization(
     x_end: int,
     color_distance: float,
     is_black: bool,
+    is_detected: bool,
     was_removed: bool,
+    bar_scale: float,
 ) -> None:
     """Draw visualization overlay for a single key onto the frame.
 
@@ -214,7 +237,9 @@ def _draw_key_visualization(
         x_end: Right pixel boundary of the sampling strip.
         color_distance: Euclidean BGR distance from background (0–~441).
         is_black: Whether this is a black key.
+        is_detected: Whether the key is detected as pressed (after threshold).
         was_removed: Whether this key was removed by spillover correction.
+        bar_scale: Distance value that maps to full bar height.
     """
     # Sampling-strip indicator (drawn just below the yellow analysis zone)
     if is_black:
@@ -224,40 +249,67 @@ def _draw_key_visualization(
     cv2.rectangle(vis_frame, (x_start, 3), (x_end - 1, 8), strip_color, -1)
 
     # Color-distance bar at the bottom of the frame
-    # Normalize distance to 0–255 for color intensity and 0–150 for bar height
-    norm = min(color_distance / _MAX_COLOR_DISTANCE, 1.0)
-    intensity = int(norm * 255)
+    norm = min(color_distance / bar_scale, 1.0)
+    bar_height = int(norm * _BAR_ZONE_HEIGHT)
 
-    if is_black:
-        color = (intensity, 0, 255 - intensity)       # blue gradient for black keys
+    # Color by detection state
+    if was_removed:
+        color = (0, 140, 255)  # orange — spillover removed
+    elif is_detected:
+        color = (0, 230, 50) if not is_black else (180, 230, 0)  # green / teal
     else:
-        color = (0, intensity, 255 - intensity)        # green gradient for white keys
+        color = (60, 60, 60)  # dim gray — below threshold
 
-    bar_height = int(norm * 150)
-    cv2.rectangle(
-        vis_frame,
-        (x_start, VIDEO_HEIGHT - bar_height),
-        (x_end - 1, VIDEO_HEIGHT),
-        color,
-        -1,
-    )
+    bar_top = VIDEO_HEIGHT - bar_height
+    cv2.rectangle(vis_frame, (x_start, bar_top), (x_end - 1, VIDEO_HEIGHT),
+                  color, -1)
 
     # Mark spillover-removed keys with a red X
     if was_removed:
-        bar_top = VIDEO_HEIGHT - bar_height
-        bar_bottom = VIDEO_HEIGHT
-        cv2.line(vis_frame, (x_start, bar_top), (x_end - 1, bar_bottom), (0, 0, 255), 2)
-        cv2.line(vis_frame, (x_start, bar_bottom), (x_end - 1, bar_top), (0, 0, 255), 2)
+        cv2.line(vis_frame, (x_start, bar_top), (x_end - 1, VIDEO_HEIGHT),
+                 (0, 0, 255), 2)
+        cv2.line(vis_frame, (x_start, VIDEO_HEIGHT), (x_end - 1, bar_top),
+                 (0, 0, 255), 2)
 
-    # Label every 11th key to avoid clutter
-    if key_index % 11 == 0:
+    # Label detected keys with their note name
+    if is_detected and not was_removed:
         label = PIANO_NOTES[key_index]
-        cv2.putText(
-            vis_frame,
-            label,
-            (x_start + 2, VIDEO_HEIGHT - bar_height - 5),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.3,
-            (255, 255, 255),
-            1,
-        )
+        cv2.putText(vis_frame, label,
+                    (x_start, bar_top - 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.28, (255, 255, 255), 1)
+    # Fixed C-octave markers for orientation (gray, always shown)
+    elif key_index in _C_NOTE_INDICES:
+        label = PIANO_NOTES[key_index]
+        cv2.putText(vis_frame, label,
+                    (x_start, VIDEO_HEIGHT - 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.25, (120, 120, 120), 1)
+
+
+def _draw_threshold_lines(
+    vis_frame: NDArray[np.uint8],
+    adaptive_threshold: float,
+    median_distance: float,
+    bar_scale: float,
+) -> None:
+    """Draw dashed threshold and median lines across the bar chart zone."""
+    # Threshold line — dashed yellow
+    threshold_y = VIDEO_HEIGHT - int(
+        min(adaptive_threshold / bar_scale, 1.0) * _BAR_ZONE_HEIGHT
+    )
+    for x in range(0, VIDEO_WIDTH, 12):
+        cv2.line(vis_frame, (x, threshold_y), (min(x + 6, VIDEO_WIDTH), threshold_y),
+                 (0, 255, 255), 1)
+    cv2.putText(vis_frame, f"threshold ({adaptive_threshold:.0f})",
+                (VIDEO_WIDTH - 200, threshold_y - 4),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 255), 1)
+
+    # Median line — dashed dim cyan (noise floor)
+    median_y = VIDEO_HEIGHT - int(
+        min(median_distance / bar_scale, 1.0) * _BAR_ZONE_HEIGHT
+    )
+    for x in range(0, VIDEO_WIDTH, 12):
+        cv2.line(vis_frame, (x, median_y), (min(x + 6, VIDEO_WIDTH), median_y),
+                 (180, 180, 0), 1)
+    cv2.putText(vis_frame, f"median ({median_distance:.0f})",
+                (VIDEO_WIDTH - 160, median_y - 4),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.3, (180, 180, 0), 1)
