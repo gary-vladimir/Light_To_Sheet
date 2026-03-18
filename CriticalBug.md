@@ -1,82 +1,54 @@
-This app is working as intended, but there is a critical logical bug that does not allow the app to work as well as it could be.
+# Critical Bug: Key Spillover (RESOLVED)
 
-The mistake lies in the way we visually detect the keys being pressed. Currently in the config.py file we have a list of vertical slices that represent the width of each key>
+> **Status**: Resolved in the `black-keys-bug` branch. The solution below was implemented and extended beyond the original proposal.
 
-```py
-# Piano key slice widths (88 keys total)
-# These represent the pixel widths for each vertical slice.
-# Pattern: white keys are wider (28-33px), black keys are narrower (15-21px)
-_OCTAVE_PATTERN: list[int] = [28, 15, 21, 15, 28, 28, 15, 20, 15, 21, 15, 28]
-VERTICAL_SLICES: list[int] = [29, 15, 28] + (_OCTAVE_PATTERN * 7) + [33]
+## Original Problem
 
-```
+The old detection system used contiguous vertical slices of varying width (`VERTICAL_SLICES`) that assumed light beams don't overlap neighboring keys. This worked for white keys but **completely failed for black keys**, which sit physically between two white keys.
 
-This introduced a big problem that i overlooked. the problem is that this system assumes the "light beams" in the synthesia style video don't overlap with other notes. This idea actually works with only the white keys, because white keys don't overlap with their neighbors keys. But this idea totally fails for black keys, because a black key is BETWEEN two white keys, they are not separated.
-Ideal scenario>
-"
-WHITE KEY | BLACK KEY | WHITE KEY | BLACK KEY |
-"
+**Example**: A light beam on C#4 (black key) spills over onto its neighbors C4 and D4 (white keys), causing three false detections instead of one. The same happens in reverse — a white key beam spills onto adjacent black keys.
 
-actual scenario>
-"
-    |BLACK KEY|      |BLACK KEY|
-WHITE KEY  |  WHITE KEY  | WHITE KEY  |
-"
+## Implemented Solution
 
-This is a bit hard to visualize in an ascii diagram, but the point is that the black keys are not separated from the white keys.
+The fix replaced the entire detection pipeline with three major changes:
 
-I will give you one practical example scenario of the issue:
+### 1. Separate Key Geometry (replaces `VERTICAL_SLICES`)
 
-Imagine there is a light beam falling for C#4 (which is a black key).
+Instead of contiguous slices, each key now has a **narrow center sampling strip** that avoids the overlap zones:
 
-Right now, our system detects C#4 as an actively pressed key. But, that same light beam is "over flowing" or "spilling" onto the neighboring white keys, which are C4 and D4.
+- **White keys (52)**: 20px strips centered within equal-width ~35.5px zones
+- **Black keys (36)**: 12px strips centered on the boundary between adjacent white key zones
 
-So our system detects C#4, C4, and D4 as actively pressed keys.
+The narrow strips sample only the core of each key's beam, minimizing contamination from neighboring keys. Pre-computed in `KEY_GEOMETRY` in `config.py`.
 
-But in reality, only C#4 is an actively pressed key. This issue is especially prominent with black keys. But it also happens with white keys, e.g:
+### 2. Color Distance Detection (replaces grayscale brightness)
 
-Imagine there is a light beam falling for D4 (which is a white key).
+The old approach converted frames to grayscale and checked brightness > 70%. This failed for:
+- Orange beams (~68% grayscale, below the 70% threshold)
+- Dark-colored beams (e.g., dark blue converts to very low grayscale)
+- Color changes mid-video
 
-Right now, our system correctly detects D4 as an actively pressed key. But, that same light beam is "over flowing" or "spilling" onto the neighboring black keys, which are D#4 and C#4.
+The new approach:
+1. **Calibrates background** from the first 48 frames — computes median BGR per key
+2. **Measures Euclidean color distance** from background for each key each frame
+3. Uses an **adaptive per-frame threshold**: `median_distance + 30` — the median tracks background drift (title screens, transitions, compression noise), preventing false-positive bursts
 
-Hopefully the issue is more clear. Given the issue, we have to change the array of vertical slices aproach to something completely different.
+### 3. All-Key Spillover Correction (extends the original proposal)
 
-I propose the following solution:
+The original proposal only addressed black key spillover. The implemented solution corrects spillover on **all 88 keys**:
 
-Separate the white keys and black keys into two different arrays.
+- For every detected key, check neighbors within **±2 positions** in piano order
+- If the key's distance is less than **80%** of its brightest neighbor's distance, remove it as spillover
+- **Preserves chords**: two genuinely pressed keys have similar distances (ratio ~1.0 > 0.80), so neither is removed
+- **Removes spillover**: reflected light typically produces only 20–60% of the source beam's distance
 
-We have a total of 52 white keys and 36 black keys.
+This handles all spillover cases:
+- Black key spilling onto white neighbors
+- White key spilling onto black neighbors
+- White key spilling onto adjacent white keys (e.g., at B-C and E-F boundaries)
 
-We process the white keys in the same way we do now, but we only process the black keys in a different way.
+## Key Files Modified
 
-for the white keys simply devide the entire width of the video into 52 equal slices, and check the brightness of each slice.
-
-For the black keys, we need to process them in a different way.
-
-I propose the following approach for black keys only:
-
-1. We locate the CENTER of the black key. This can be easy to find, the center of the black key is always exactly located between two white keys. (when one white key ends, and the other one starts, there is the center of a black key).
-
-Once we locate the center of all the black keys, (we must not forget that in between B and C and between E and F there are no black keys!)
-
-But once we get all the centers of the black keys, we can then create a "box" around the center of each black key. This box will be the area where we check for brightness. This box should be smaller than the width of a white key slice. (white keys are wider 30-40px, black keys are narrower 15-22px aprox)
-
-Here is the new critical detail:
-
-Once we check the brightness of the black key box, IF it's bright enough to be considered a pressed key, we then create a new box, however... this new box is not centered on the black key. this new box starts at the center of the black key and extends to the right, covering the right half of the black key and the left half of the white key to its right. We then repeat the same process, but this time we create a new box that starts at the center of the black key and extends to the left, covering the left half of the black key and the right half of the white key to its left.
-
-IF ANY of these two boxes are bright enough to be considered a pressed key, we then REMOVE the black key as pressed.
-
-IF ANY of these two boxes are bright enough, it means that the current black key "been pressed" is not actually pressed, but it is just a "spill over" from the neighboring white keys.
-
-> careful! the brightness threshold for these 2 additional boxes should consider the fact that in theory half of the box is black key, and the other half is white key. So this means that if the black key is pressed, and the white key is not pressed, the brightness in total should be split in half. and if both the black key and the white key are pressed, the brightness in total should be much greater. I recommend the following> if the brightness of any of these 2 additional boxes is greater than 90% of the original brightness threshold, then we remove the black key as pressed.
-
-This is the new logic i propose, this is the initial solution idea. However.... i am just proposing a recomendation, i want you to understand my idea, and based on it, create the final, new, and improved solution.
-
-Be very creative, and think outside the box. The goal is to create a RELIABLE solution.
-
-I strongly belive that keeping the solution simple is the key to success.
-
-This problem might be solved with simple conditionals and logic!
-
-I am confident that there is no need to overcomplicate this, and that you can come up with a solution that is both simple and effective.
+- `src/config.py` — replaced `VERTICAL_SLICES` with `KEY_GEOMETRY`, added calibration/threshold/spillover constants
+- `src/frame_analyzer.py` — complete rewrite: background calibration, color distance detection, adaptive threshold, all-key spillover correction, rich visualization overlay
+- `src/video_processor.py` — calls `calibrate_background()` before frame loop, passes background to analysis, passes detection metadata to preview save
