@@ -1,6 +1,6 @@
 # Light to Sheet
 
-Detects piano key presses from Synthesia-style videos by analyzing brightness patterns across 88 vertical slices representing the 88 piano keys (A0 to C8). Converts video into binary key states, CSV data, and ASCII sheet music notation.
+Detects piano key presses from Synthesia-style videos by measuring color distance from a calibrated background across 88 sampling strips representing the 88 piano keys (A0 to C8). Converts video into binary key states, CSV data, and ASCII sheet music notation.
 
 Available as both a **web app** (`app.py`) and a **CLI tool** (`main.py`). Both share the same processing engine in `src/`.
 
@@ -81,7 +81,8 @@ Returns JSON:
 {
   "job_id": "uuid",
   "sheet_music": "G5  --- B4  ...\nD5  --- ---  ...",
-  "files": ["output.txt", "piano.csv", "sheet_music.txt"]
+  "files": ["output.txt", "piano.csv", "sheet_music.txt"],
+  "preview_frames": ["frame_000006.jpg", "frame_000012.jpg", "..."]
 }
 ```
 
@@ -90,13 +91,16 @@ Each request gets an isolated job directory under the system temp folder (`/tmp/
 ### `GET /api/download/<job_id>/<filename>`
 Serves an output file for download. Only `output.txt`, `piano.csv`, and `sheet_music.txt` are allowed (whitelist). The job ID is validated as a UUID to prevent path traversal.
 
+### `GET /api/preview/<job_id>/<filename>`
+Serves a preview frame image. Filename must match `frame_NNNNNN.jpg`. The job ID is validated as a UUID and the filename is checked against a regex pattern to prevent path traversal.
+
 ## How It Works
 
 ### 1. Video Preprocessing (FFmpeg)
 - Downloads YouTube video (cached in `downloaded_videos/`) or accepts a local/uploaded file
 - Uses FFmpeg to resize to **1848x1080** (stretches to fit, no aspect ratio preservation)
 - Converts to **24fps** while maintaining original duration
-- Width of 1848px is intentional — it's the exact sum of the 88 variable-width slices
+- Width of 1848px is intentional — 52 white keys × ~35.54px each
 
 ### 2. Frame Analysis (OpenCV)
 - **Background calibration**: reads the first 48 frames (2 seconds) and computes the median BGR color for each of the 88 key sampling regions — this establishes what "no beam" looks like per key
@@ -117,7 +121,7 @@ Three synchronized output files are written per run:
 | Behavior | Web (`app.py`) | CLI (`main.py`) |
 |---|---|---|
 | Processing speed | As fast as possible (`realtime=False`) | Real-time pacing (`realtime=True`) |
-| Preview frames | Disabled | Optional (saves to `preview_frames/`) |
+| Preview frames | Enabled (served via API for in-browser navigation) | Optional (saves to `preview_frames/`) |
 | Output location | Temp job directory (`/tmp/.../<uuid>/`) | Current working directory |
 | Input method | YouTube URL or file upload via browser | YouTube URL or local file via terminal prompts |
 
@@ -156,13 +160,16 @@ A#3 ---  F#2 ---  ---  E3  ---  ...
 
 See `sheet_music_requirements.md` for the original design spec.
 
-### `preview_frames/` (CLI only)
+### `preview_frames/`
 Annotated visualization frames showing:
-- Color-coded brightness bars for each of the 88 slices
-- Vertical slice division lines
+- Color-coded sampling strips (cyan = white key, magenta = black key)
+- Color-distance bars per key (green gradient = white, blue gradient = black)
+- Red X markers on keys removed by spillover correction
 - Frame number and timestamp overlay
 - Active key count (e.g., "Active keys: 5 / 88")
 - Saved as JPG images every 6 frames (4 per second at 24fps)
+- In the **web app**, preview frames are browsable with prev/next arrow buttons and keyboard arrow keys
+- In the **CLI**, preview frames are saved to `preview_frames/` on disk
 
 ## Project Structure
 
@@ -180,10 +187,10 @@ Light_To_Sheet/
 │
 ├── src/                         # Shared processing engine
 │   ├── __init__.py              # Package marker (v1.0.0)
-│   ├── config.py                # All constants: slice widths, note mapping, thresholds
+│   ├── config.py                # All constants: key geometry, note mapping, detection thresholds
 │   ├── utils.py                 # Timestamp formatting, note pitch sorting, file cleanup
 │   ├── video_downloader.py      # YouTube downloads via yt-dlp (requires Deno)
-│   ├── frame_analyzer.py        # Per-frame brightness detection (OpenCV)
+│   ├── frame_analyzer.py        # Per-frame color-distance detection with background calibration (OpenCV)
 │   ├── output_writer.py         # Multi-format file writer (context manager)
 │   └── video_processor.py       # FFmpeg preprocessing + frame-by-frame loop
 │
