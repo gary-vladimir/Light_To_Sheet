@@ -2,7 +2,9 @@
 
 Detects piano key presses from Synthesia-style videos by measuring color distance from a calibrated background across 88 sampling strips representing the 88 piano keys (A0 to C8). Converts video into binary key states, CSV data, and ASCII sheet music notation.
 
-Available as both a **web app** (`app.py`) and a **CLI tool** (`main.py`). Both share the same processing engine in `src/`.
+**Live app:** [light-to-sheet-2032166340.us-central1.run.app](https://light-to-sheet-2032166340.us-central1.run.app/)
+
+Available as a **web app** (`app.py`), a **CLI tool** (`main.py`), and a **deployed cloud service** (Google Cloud Run). All share the same processing engine in `src/`.
 
 ## Setup
 
@@ -12,7 +14,7 @@ These must be installed on the host machine (or are pre-installed in the DevCont
 
 - **Python 3.11+**
 - **FFmpeg** — video preprocessing (`brew install ffmpeg` or `apt install ffmpeg`)
-- **Deno >= 2.0** — required by yt-dlp to solve YouTube's JS challenges (`brew install deno` or `curl -fsSL https://deno.land/install.sh | sh`)
+- **Deno >= 2.0** — required by yt-dlp for YouTube downloads (`brew install deno`)
 
 ### Python Dependencies
 
@@ -31,28 +33,30 @@ The project includes a `.devcontainer/` configuration that installs Python 3.11,
 
 ```bash
 # VS Code: Ctrl+Shift+P → "Dev Containers: Reopen in Container"
-# Then run: python app.py (web) or python main.py (CLI)
+# Then run: DEBUG=1 python app.py (web) or python main.py (CLI)
 ```
 
 ## Usage
 
-### Web App
+### Web App (local)
 
 ```bash
-python app.py
+DEBUG=1 python app.py
 ```
 
-Opens on [http://localhost:5000](http://localhost:5000) by default. The port can be overridden with the `PORT` environment variable:
-
-```bash
-PORT=8080 python app.py
-```
+Opens on [http://localhost:5000](http://localhost:5000). The `DEBUG=1` flag disables Firebase auth for local development.
 
 From the browser:
-1. Paste a **YouTube URL** or **upload a video file** (max 500 MB)
+1. **Upload a video file** (max 500 MB) or paste a **YouTube URL**
 2. Click **Process Video** and wait (processing is fast — no real-time delay)
 3. View the ASCII sheet music inline in the browser
 4. Download `output.txt`, `piano.csv`, and `sheet_music.txt`
+
+### Web App (production)
+
+The app is deployed on Google Cloud Run with Firebase Google Sign-In. See [DEPLOYMENT.md](DEPLOYMENT.md) for full deployment instructions.
+
+YouTube URL downloads in production are routed through a Mac-based proxy (residential IP). See [DOWNLOAD_PROXY_SETUP.md](DOWNLOAD_PROXY_SETUP.md) for setup.
 
 ### CLI
 
@@ -72,9 +76,11 @@ The CLI runs in **real-time mode** (1/24 second delay per frame), so processing 
 Serves the single-page frontend.
 
 ### `POST /api/process`
+**Requires authentication** (Firebase ID token in `Authorization: Bearer <token>` header).
+
 Accepts multipart form data with either:
 - `youtube_url` (string) — a YouTube video URL, or
-- `video_file` (file) — an uploaded video file
+- `video_file` (file) — an uploaded video file (max 500 MB)
 
 Returns JSON:
 ```json
@@ -194,28 +200,33 @@ Annotated visualization frames with a rich detection overlay:
 
 ```
 Light_To_Sheet/
-├── app.py                       # Web app entry point (Flask)
+├── app.py                       # Web app entry point (Flask + Firebase Auth)
 ├── main.py                      # CLI entry point
+├── download_proxy.py            # Mac-side YouTube download proxy server
+├── Dockerfile                   # Production Docker image (Cloud Run)
+├── .dockerignore                # Files excluded from Docker build
 ├── requirements.txt             # Python dependencies
-├── sheet_music_requirements.md  # Original design spec for ASCII sheet music
 │
 ├── templates/
-│   └── index.html               # Single-page web frontend (vanilla HTML/JS)
+│   └── index.html               # Single-page frontend (Firebase Auth + vanilla JS)
 ├── static/
-│   └── style.css                # Web app styling (no frameworks)
+│   └── style.css                # Dark theme UI with animations
 │
 ├── src/                         # Shared processing engine
 │   ├── __init__.py              # Package marker (v1.0.0)
 │   ├── config.py                # All constants: key geometry, note mapping, detection thresholds
 │   ├── utils.py                 # Timestamp formatting, note pitch sorting, file cleanup
-│   ├── video_downloader.py      # YouTube downloads via yt-dlp (requires Deno)
+│   ├── video_downloader.py      # YouTube downloads (proxy in production, yt-dlp locally)
 │   ├── frame_analyzer.py        # Per-frame color-distance detection, adaptive threshold, spillover correction, visualization (OpenCV)
 │   ├── output_writer.py         # Multi-format file writer (context manager)
 │   └── video_processor.py       # FFmpeg preprocessing + frame-by-frame loop
 │
-├── downloaded_videos/           # Cached YouTube downloads (git-ignored)
+├── DEPLOYMENT.md                # Full Cloud Run deployment guide
+├── DOWNLOAD_PROXY_SETUP.md      # YouTube download proxy setup (Cloudflare Tunnel)
+├── sheet_music_requirements.md  # Original design spec for ASCII sheet music
+│
 ├── .devcontainer/
-│   ├── Dockerfile               # Python 3.11 + FFmpeg + Deno
+│   ├── Dockerfile               # Dev environment: Python 3.11 + FFmpeg + Deno
 │   └── devcontainer.json        # VS Code / Codespaces config, forwards port 5000
 └── .gitignore
 ```
@@ -247,5 +258,6 @@ All tunables live in `src/config.py`:
 - **Key Geometry**: White keys (52) are sampled at narrow 20px center strips within equal-width zones (~35.5px each). Black keys (36) are sampled at narrow 12px strips centered on the boundary between adjacent white keys. The narrow strips minimize spillover contamination from neighboring key beams
 - **All-Key Spillover Correction**: For every detected key, its distance is compared against its strongest neighbor within ±2 positions (physically adjacent keys). If the key's distance is less than 80% of the neighbor's distance, it is removed as light spillover. This preserves chords (two genuinely pressed keys have similar distances, ratio ~1.0 > 0.80) while removing spillover (dim reflected light at 20–60% of the source's distance)
 - **Frame Rate Normalization**: All videos are converted to 24fps during preprocessing, so frame count maps directly to time (24 frames = 1 second)
-- **YouTube Downloads**: Uses `yt-dlp` with Deno as the JS runtime (required since late 2025 due to YouTube's anti-bot challenges). Videos are cached in `downloaded_videos/` to avoid re-downloading
+- **YouTube Downloads**: In production, YouTube downloads are routed through a Mac-based proxy (`download_proxy.py`) via Cloudflare Tunnel — YouTube blocks all cloud server IPs, so a residential IP is required. Locally, yt-dlp downloads directly (requires Deno as JS runtime). Videos are cached to avoid re-downloading
+- **Web App Auth**: Firebase Authentication with Google Sign-In. The frontend obtains a Firebase ID token and sends it in the `Authorization` header. The backend verifies it via `firebase-admin`. Auth is disabled in local dev when credentials aren't configured
 - **Web App Jobs**: Each web request creates an isolated temp directory (`/tmp/light_to_sheet_jobs/<uuid>/`), processes there, and serves files for download. Preprocessed/uploaded videos are cleaned up after processing
