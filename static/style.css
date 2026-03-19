@@ -134,6 +134,70 @@ body {
   -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 70%);
 }
 
+/* --- Top Auth Navbar --- */
+.auth-navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  padding: 0.75rem 1.5rem;
+  pointer-events: none;
+  animation: navbarSlideIn 0.6s var(--transition-smooth) both;
+}
+
+@keyframes navbarSlideIn {
+  from { opacity: 0; transform: translateY(-20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.auth-navbar-inner {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+  pointer-events: auto;
+}
+
+/* Login button (Google branded) */
+.login-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 1.1rem;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+}
+
+.login-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--glass-border-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.login-btn .google-icon {
+  flex-shrink: 0;
+}
+
+/* Navbar user profile (overrides the header version) */
+.auth-navbar .user-profile {
+  margin-top: 0;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
 /* --- Container --- */
 .container {
   position: relative;
@@ -141,6 +205,7 @@ body {
   max-width: 800px;
   margin: 0 auto;
   padding: 2rem 1.5rem 4rem;
+  padding-top: 4rem; /* space for the fixed navbar */
 }
 
 /* --- Header --- */
@@ -283,51 +348,20 @@ h1 {
   }
 }
 
-/* --- Tabs --- */
-.tabs {
+/* --- Input Label --- */
+.input-label {
   display: flex;
-  gap: 4px;
-  margin-bottom: 1.25rem;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: var(--radius-md);
-  padding: 4px;
-  position: relative;
-}
-
-.tab {
-  flex: 1;
-  padding: 0.6rem 1rem;
-  border: none;
-  background: transparent;
-  font-family: 'Inter', sans-serif;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 0.9rem;
   font-weight: 500;
   color: var(--text-secondary);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: color var(--transition-fast), background var(--transition-base);
-  position: relative;
-  z-index: 1;
+  margin-bottom: 0.75rem;
 }
 
-.tab:hover {
-  color: var(--text-primary);
-}
-
-.tab.active {
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-}
-
-/* --- Tab content --- */
-.tab-content {
-  display: none;
-  animation: fadeSlideIn 0.3s ease both;
-}
-
-.tab-content.active {
-  display: block;
+.input-label svg {
+  color: var(--accent-light);
+  flex-shrink: 0;
 }
 
 @keyframes fadeSlideIn {
@@ -363,80 +397,6 @@ input[type="url"]:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow), inset 0 0 0 1px var(--accent);
   background: rgba(108, 92, 231, 0.04);
-}
-
-/* --- File Upload --- */
-.file-upload {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  padding: 2rem;
-  border: 2px dashed rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-md);
-  text-align: center;
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: border-color var(--transition-base), color var(--transition-base), background var(--transition-base);
-  position: relative;
-  overflow: hidden;
-}
-
-.file-upload::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--gradient-1);
-  opacity: 0;
-  transition: opacity var(--transition-base);
-  border-radius: inherit;
-}
-
-.file-upload:hover {
-  border-color: var(--accent);
-  color: var(--text-primary);
-}
-
-.file-upload:hover::before {
-  opacity: 0.04;
-}
-
-.file-upload input[type="file"] {
-  display: none;
-}
-
-.upload-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: rgba(108, 92, 231, 0.1);
-  transition: transform var(--transition-spring), background var(--transition-base);
-}
-
-.file-upload:hover .upload-icon {
-  transform: scale(1.1);
-  background: rgba(108, 92, 231, 0.2);
-}
-
-.upload-icon svg {
-  color: var(--accent-light);
-}
-
-.file-upload span {
-  position: relative;
-  z-index: 1;
-  font-weight: 500;
-}
-
-.file-upload .file-hint {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  position: relative;
-  z-index: 1;
 }
 
 /* --- Submit Button --- */
@@ -808,6 +768,55 @@ input[type="url"]:focus {
   transition: opacity 0.2s ease;
 }
 
+/* --- User Profile (Auth) --- */
+.user-profile {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  animation: fadeSlideIn 0.3s ease both;
+}
+
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid var(--glass-border-hover);
+  object-fit: cover;
+}
+
+.user-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sign-out-btn {
+  padding: 0.3rem 0.75rem;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.sign-out-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--glass-border-hover);
+}
+
 /* --- Footer --- */
 .footer {
   text-align: center;
@@ -838,6 +847,7 @@ input[type="url"]:focus {
 @media (max-width: 640px) {
   .container {
     padding: 1.5rem 1rem 3rem;
+    padding-top: 3.5rem;
   }
 
   h1 {
@@ -863,6 +873,25 @@ input[type="url"]:focus {
   #frame-counter {
     min-width: auto;
     font-size: 0.75rem;
+  }
+
+  .auth-navbar {
+    padding: 0.5rem 1rem;
+  }
+
+  .login-btn {
+    font-size: 0.8rem;
+    padding: 0.45rem 0.9rem;
+  }
+
+  .user-profile {
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+  }
+
+  .user-name {
+    max-width: 120px;
+    font-size: 0.8rem;
   }
 }
 

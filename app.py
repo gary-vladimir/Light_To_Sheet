@@ -1,21 +1,25 @@
 """
 Light to Sheet — Web Application
 
-A minimal Flask app that wraps the piano note detection algorithm,
-letting users paste a YouTube URL or upload a video file and receive
-sheet music output without needing a terminal.
+A Flask app that wraps the piano note detection algorithm,
+letting users paste a YouTube URL and receive sheet music output
+without needing a terminal. Protected by Firebase Authentication.
 
-Run as: python app.py
+Run locally:  DEBUG=1 python app.py
+Production:   gunicorn app:app
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shutil
 import tempfile
 import uuid
 
+import firebase_admin
+from firebase_admin import auth as firebase_auth
 from flask import Flask, jsonify, render_template, request, send_file
 
 from src.video_downloader import download_youtube_video
@@ -23,11 +27,47 @@ from src.video_processor import preprocess_video, process_video
 
 app = Flask(__name__)
 
-# Max upload size: 500 MB
-app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024
+# Initialize Firebase Admin SDK.
+# On Cloud Run: uses Application Default Credentials automatically.
+# Locally: set GOOGLE_APPLICATION_CREDENTIALS env var to a service account JSON.
+# If no credentials are available (local dev), auth is disabled with a warning.
+_firebase_initialized = False
+try:
+    firebase_admin.initialize_app()
+    _firebase_initialized = True
+except Exception:
+    logging.warning(
+        "Firebase credentials not found — auth is DISABLED. "
+        "Set GOOGLE_APPLICATION_CREDENTIALS for local Firebase auth testing."
+    )
 
 JOBS_DIR = os.path.join(tempfile.gettempdir(), "light_to_sheet_jobs")
 ALLOWED_OUTPUT_FILES = {"output.txt", "piano.csv", "sheet_music.txt"}
+
+log = logging.getLogger(__name__)
+
+
+def verify_firebase_token(req) -> dict:
+    """Extract and verify the Firebase ID token from the Authorization header.
+
+    Returns the decoded token claims (contains 'uid', 'email', 'name', etc.).
+    Raises ValueError if missing or invalid.
+
+    When Firebase is not initialized (local dev without credentials),
+    auth is bypassed and a placeholder user dict is returned.
+    """
+    if not _firebase_initialized:
+        return {"uid": "local-dev", "email": "dev@localhost"}
+
+    auth_header = req.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise ValueError("Authentication required")
+
+    id_token = auth_header.split("Bearer ", 1)[1]
+    try:
+        return firebase_auth.verify_id_token(id_token)
+    except Exception as e:
+        raise ValueError(f"Invalid authentication token: {e}") from e
 
 
 @app.route("/")
@@ -37,13 +77,21 @@ def index() -> str:
 
 @app.route("/api/process", methods=["POST"])
 def api_process():
-    """Accept a YouTube URL or uploaded video, process it, return results."""
+    """Accept a YouTube URL, process it, return results. Requires authentication."""
+    # Verify Firebase auth token
+    try:
+        user = verify_firebase_token(request)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 401
+
+    log.info("Processing request from user %s", user.get("email", user["uid"]))
+
     job_id = str(uuid.uuid4())
     job_dir = os.path.join(JOBS_DIR, job_id)
     os.makedirs(job_dir, exist_ok=True)
 
     try:
-        video_path = _get_input_video(request, job_dir)
+        video_path = _get_input_video(request)
     except ValueError as e:
         shutil.rmtree(job_dir, ignore_errors=True)
         return jsonify({"error": str(e)}), 400
@@ -65,10 +113,6 @@ def api_process():
         # Clean up the large preprocessed file (keep output files)
         if os.path.exists(processed_path):
             os.remove(processed_path)
-        # Clean up uploaded input file
-        input_file = os.path.join(job_dir, "input.mp4")
-        if os.path.exists(input_file):
-            os.remove(input_file)
 
     # Read sheet music for inline display
     sheet_music_path = os.path.join(job_dir, "sheet_music.txt")
@@ -96,11 +140,9 @@ def api_process():
 @app.route("/api/download/<job_id>/<filename>")
 def api_download(job_id: str, filename: str):
     """Serve an output file for download."""
-    # Validate to prevent path traversal
     if filename not in ALLOWED_OUTPUT_FILES:
         return jsonify({"error": "Invalid filename"}), 400
 
-    # Validate job_id is a UUID (no slashes or dots)
     try:
         uuid.UUID(job_id)
     except ValueError:
@@ -116,13 +158,11 @@ def api_download(job_id: str, filename: str):
 @app.route("/api/preview/<job_id>/<filename>")
 def api_preview(job_id: str, filename: str):
     """Serve a preview frame image."""
-    # Validate job_id is a UUID
     try:
         uuid.UUID(job_id)
     except ValueError:
         return jsonify({"error": "Invalid job ID"}), 400
 
-    # Validate filename matches expected pattern (prevent path traversal)
     if not re.fullmatch(r"frame_\d{6}\.jpg", filename):
         return jsonify({"error": "Invalid filename"}), 400
 
@@ -133,36 +173,24 @@ def api_preview(job_id: str, filename: str):
     return send_file(file_path, mimetype="image/jpeg")
 
 
-def _get_input_video(req, job_dir: str) -> str:
-    """Extract the video path from the request (YouTube URL or file upload).
+def _get_input_video(req) -> str:
+    """Extract the YouTube URL from the request and download the video.
 
-    Args:
-        req: Flask request object.
-        job_dir: Directory to save uploaded files.
-
-    Returns:
-        Path to the video file.
-
-    Raises:
-        ValueError: If no valid input is provided.
+    Returns the path to the downloaded video file.
+    Raises ValueError if no valid URL is provided.
     """
     youtube_url = req.form.get("youtube_url", "").strip()
-    video_file = req.files.get("video_file")
 
-    if youtube_url:
-        try:
-            return download_youtube_video(youtube_url)
-        except Exception as e:
-            raise ValueError(f"Failed to download video: {e}") from e
+    if not youtube_url:
+        raise ValueError("Please provide a YouTube URL.")
 
-    if video_file and video_file.filename:
-        input_path = os.path.join(job_dir, "input.mp4")
-        video_file.save(input_path)
-        return input_path
-
-    raise ValueError("Please provide a YouTube URL or upload a video file.")
+    try:
+        return download_youtube_video(youtube_url)
+    except Exception as e:
+        raise ValueError(f"Failed to download video: {e}") from e
 
 
 if __name__ == "__main__":
+    debug = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
     port = int(os.environ.get("PORT", 5000))
-    app.run(debug=True, host="0.0.0.0", port=port)
+    app.run(debug=debug, host="0.0.0.0", port=port)

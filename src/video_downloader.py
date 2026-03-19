@@ -7,14 +7,40 @@ with caching support to avoid re-downloading the same video.
 Requires:
 - yt-dlp >= 2025.11.12
 - Deno >= 2.0 (external JS runtime needed by yt-dlp for YouTube)
+
+Cookie authentication:
+  YouTube blocks downloads from cloud server IPs (bot detection).
+  To fix this, provide a Netscape-format cookies.txt file via either:
+    1. YOUTUBE_COOKIES_FILE env var pointing to the file path, OR
+    2. Place a file at /secrets/youtube_cookies/cookies.txt
+       (the default mount point for Cloud Run secrets)
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 
 import yt_dlp
+
+log = logging.getLogger(__name__)
+
+# Paths to look for a YouTube cookies file (checked in order).
+_COOKIES_PATHS = [
+    os.environ.get("YOUTUBE_COOKIES_FILE", ""),
+    "/secrets/youtube_cookies/cookies.txt",
+    "cookies.txt",  # local dev convenience
+]
+
+
+def _find_cookies_file() -> str | None:
+    """Return the first existing cookies file path, or None."""
+    for path in _COOKIES_PATHS:
+        if path and os.path.isfile(path):
+            log.info("Using YouTube cookies file: %s", path)
+            return path
+    return None
 
 
 def download_youtube_video(url: str, custom_filename: str | None = None) -> str:
@@ -51,6 +77,16 @@ def download_youtube_video(url: str, custom_filename: str | None = None) -> str:
         "quiet": True,
         "no_warnings": True,
     }
+
+    # Attach cookies file if available (required on cloud servers)
+    cookies_file = _find_cookies_file()
+    if cookies_file:
+        ydl_opts["cookiefile"] = cookies_file
+    else:
+        log.warning(
+            "No YouTube cookies file found. Downloads may fail on cloud servers. "
+            "See DEPLOYMENT.md § 'YouTube Cookies Setup' for instructions."
+        )
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
