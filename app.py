@@ -2,8 +2,8 @@
 Light to Sheet — Web Application
 
 A Flask app that wraps the piano note detection algorithm,
-letting users paste a YouTube URL and receive sheet music output
-without needing a terminal. Protected by Firebase Authentication.
+letting users paste a YouTube URL or upload a video file and receive
+sheet music output without needing a terminal. Protected by Firebase Authentication.
 
 Run locally:  DEBUG=1 python app.py
 Production:   gunicorn app:app
@@ -26,6 +26,9 @@ from src.video_downloader import download_youtube_video
 from src.video_processor import preprocess_video, process_video
 
 app = Flask(__name__)
+
+# Max upload size: 500 MB
+app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024
 
 # Initialize Firebase Admin SDK.
 # On Cloud Run: uses Application Default Credentials automatically.
@@ -77,7 +80,7 @@ def index() -> str:
 
 @app.route("/api/process", methods=["POST"])
 def api_process():
-    """Accept a YouTube URL, process it, return results. Requires authentication."""
+    """Accept a YouTube URL or uploaded video, process it, return results. Requires authentication."""
     # Verify Firebase auth token
     try:
         user = verify_firebase_token(request)
@@ -91,7 +94,7 @@ def api_process():
     os.makedirs(job_dir, exist_ok=True)
 
     try:
-        video_path = _get_input_video(request)
+        video_path = _get_input_video(request, job_dir)
     except ValueError as e:
         shutil.rmtree(job_dir, ignore_errors=True)
         return jsonify({"error": str(e)}), 400
@@ -113,6 +116,10 @@ def api_process():
         # Clean up the large preprocessed file (keep output files)
         if os.path.exists(processed_path):
             os.remove(processed_path)
+        # Clean up uploaded input file
+        input_file = os.path.join(job_dir, "input.mp4")
+        if os.path.exists(input_file):
+            os.remove(input_file)
 
     # Read sheet music for inline display
     sheet_music_path = os.path.join(job_dir, "sheet_music.txt")
@@ -173,21 +180,34 @@ def api_preview(job_id: str, filename: str):
     return send_file(file_path, mimetype="image/jpeg")
 
 
-def _get_input_video(req) -> str:
-    """Extract the YouTube URL from the request and download the video.
+def _get_input_video(req, job_dir: str) -> str:
+    """Extract the video path from the request (YouTube URL or file upload).
 
-    Returns the path to the downloaded video file.
-    Raises ValueError if no valid URL is provided.
+    Args:
+        req: Flask request object.
+        job_dir: Directory to save uploaded files.
+
+    Returns:
+        Path to the video file.
+
+    Raises:
+        ValueError: If no valid input is provided.
     """
     youtube_url = req.form.get("youtube_url", "").strip()
+    video_file = req.files.get("video_file")
 
-    if not youtube_url:
-        raise ValueError("Please provide a YouTube URL.")
+    if youtube_url:
+        try:
+            return download_youtube_video(youtube_url)
+        except Exception as e:
+            raise ValueError(f"Failed to download video: {e}") from e
 
-    try:
-        return download_youtube_video(youtube_url)
-    except Exception as e:
-        raise ValueError(f"Failed to download video: {e}") from e
+    if video_file and video_file.filename:
+        input_path = os.path.join(job_dir, "input.mp4")
+        video_file.save(input_path)
+        return input_path
+
+    raise ValueError("Please provide a YouTube URL or upload a video file.")
 
 
 if __name__ == "__main__":

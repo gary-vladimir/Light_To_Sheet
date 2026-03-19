@@ -3,6 +3,7 @@
 This guide walks you through deploying Light to Sheet as a public web app with Google Sign-In authentication. By the end, you'll have a live URL anyone can visit.
 
 **What you'll set up:**
+
 - Firebase Authentication (Google Sign-In) - handles user login
 - Google Cloud Run - hosts your app, scales automatically
 - Total monthly cost: **$0** (free tier)
@@ -90,8 +91,8 @@ const firebaseConfig = {
 };
 ```
 
-8. **Copy these values.** You need them for the next step.
-9. Click **Continue to console**
+1. **Copy these values.** You need them for the next step.
+2. Click **Continue to console**
 
 > **Are these values secret?** No. Firebase config values are designed to be public. They only identify your project. Security is enforced server-side by verifying tokens.
 
@@ -196,6 +197,22 @@ Make sure you are in the project root directory (where `Dockerfile` is located):
 cd /path/to/Light_To_Sheet
 ```
 
+Grant Storage access
+
+```bash
+gcloud projects add-iam-policy-binding light-to-sheet \
+  --member='serviceAccount:2032166340-compute@developer.gserviceaccount.com' \
+  --role='roles/storage.admin'
+```
+
+Grant Cloud Build access
+
+```bash
+gcloud projects add-iam-policy-binding light-to-sheet \
+  --member='serviceAccount:2032166340-compute@developer.gserviceaccount.com' \
+  --role='roles/cloudbuild.builds.builder'
+```
+
 Then deploy:
 
 ```bash
@@ -210,6 +227,7 @@ gcloud run deploy light-to-sheet \
 ```
 
 **What each flag does:**
+
 | Flag | Purpose |
 |------|---------|
 | `--source .` | Builds the Docker image from your Dockerfile |
@@ -221,6 +239,7 @@ gcloud run deploy light-to-sheet \
 | `--allow-unauthenticated` | Lets anyone visit the page (Firebase handles login, not Cloud Run) |
 
 **During deployment:**
+
 - If asked to create an Artifact Registry repository, type **Y** and press Enter
 - If asked to enable APIs, type **Y** and press Enter
 - The first deployment takes 5-10 minutes (building the Docker image)
@@ -248,9 +267,11 @@ Firebase needs to know your Cloud Run URL is legitimate, otherwise the Google Si
 4. Click **Authorized domains**
 5. Click **Add domain**
 6. Paste your Cloud Run URL **without the `https://`**. For example:
+
    ```
    light-to-sheet-abc123-uc.a.run.app
    ```
+
 7. Click **Add**
 
 ---
@@ -330,10 +351,12 @@ YouTube cookies typically last **several months**, but they will eventually expi
 
 1. Re-export cookies from your browser (repeat Step 10a)
 2. Update the secret:
+
    ```bash
    gcloud secrets versions add youtube-cookies \
      --data-file=cookies.txt
    ```
+
 3. Redeploy the app (repeat Step 10c) — Cloud Run needs a new revision to pick up the updated secret
 
 > **Tip:** You'll know cookies expired when you see "Sign in to confirm you're not a bot" in the Cloud Run logs.
@@ -343,27 +366,33 @@ YouTube cookies typically last **several months**, but they will eventually expi
 ## Troubleshooting
 
 ### "Sign in to confirm you're not a bot" / YouTube download fails
+
 - You need to set up YouTube cookies — see Step 10 above
 - If cookies were already set up, they may have expired — refresh them (Step 10d)
 - Check that you were signed into YouTube when you exported the cookies
 
 ### "Sign-in popup doesn't appear" or "auth/unauthorized-domain" error
+
 - Make sure you added your Cloud Run URL to Firebase Authorized Domains (Step 8)
 - Make sure the URL doesn't include `https://` when adding it
 
 ### "Processing failed" error
+
 - Check Cloud Run logs: `gcloud run services logs read light-to-sheet --region us-central1`
 - The video might be too long, or the YouTube URL might be invalid
 
 ### Deployment fails with "build error"
+
 - Make sure your `Dockerfile` is in the project root directory (not inside `.devcontainer/`)
 - Make sure all files are saved and committed
 
 ### "Authentication required" 401 error
+
 - The Firebase config in `index.html` might be wrong — double-check the values from Step 3c
 - Clear your browser cache and try again
 
 ### App is slow to load (10-30 seconds)
+
 - This is a **cold start** — the container needs to boot up when it hasn't been used recently
 - Subsequent requests within 15 minutes will be fast
 - This is normal for the free tier (the server scales to zero when idle to save cost)
@@ -410,6 +439,7 @@ Plus your **$300 free credit** covers the first 90 days regardless.
 When you start getting more traffic and need to handle multiple users at once:
 
 1. **Allow more instances:**
+
    ```bash
    gcloud run services update light-to-sheet \
      --region us-central1 \
@@ -421,6 +451,7 @@ When you start getting more traffic and need to handle multiple users at once:
 3. **Add rate limiting** per user with Firestore (Firebase's database) to prevent abuse.
 
 4. **Set a minimum instance** to avoid cold starts (costs money but eliminates the 10-30s delay):
+
    ```bash
    gcloud run services update light-to-sheet \
      --region us-central1 \
@@ -464,6 +495,7 @@ To run locally WITH Firebase auth:
 2. Click **Generate new private key** > **Generate key**
 3. Save the JSON file somewhere safe (do NOT commit it to git)
 4. Set the environment variable:
+
    ```bash
    export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your-service-account-key.json"
    DEBUG=1 python app.py

@@ -14,6 +14,9 @@ RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh
 
 WORKDIR /app
 
+# Ensure Python output is sent straight to logs (no buffering)
+ENV PYTHONUNBUFFERED=1
+
 # Install Python dependencies first (Docker layer caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

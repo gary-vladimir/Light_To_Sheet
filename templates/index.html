@@ -119,18 +119,46 @@
     <main>
       <!-- Input Card -->
       <div class="card" id="input-card">
-        <form id="process-form">
-          <label class="input-label" for="youtube-url">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19.13C5.12 19.56 12 19.56 12 19.56s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg>
+        <!-- Tabs -->
+        <div class="tabs">
+          <button class="tab active" data-tab="upload" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload Video
+          </button>
+          <button class="tab" data-tab="youtube" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19.13C5.12 19.56 12 19.56 12 19.56s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg>
             YouTube URL
-          </label>
-          <input
-            type="url"
-            name="youtube_url"
-            id="youtube-url"
-            placeholder="https://www.youtube.com/watch?v=..."
-            autocomplete="off"
-          >
+          </button>
+        </div>
+
+        <form id="process-form">
+          <!-- File upload input (default tab) -->
+          <div class="tab-content active" id="tab-upload">
+            <label class="file-upload" id="file-label">
+              <input type="file" name="video_file" id="video-file" accept="video/*">
+              <div class="upload-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </div>
+              <span class="upload-text">Choose a video file</span>
+              <span class="file-hint">MP4, AVI, MOV, MKV, WebM — up to 500 MB</span>
+            </label>
+          </div>
+
+          <!-- YouTube URL input -->
+          <div class="tab-content" id="tab-youtube">
+            <input
+              type="url"
+              name="youtube_url"
+              id="youtube-url"
+              placeholder="https://www.youtube.com/watch?v=..."
+              autocomplete="off"
+            >
+            <p class="youtube-note">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              YouTube may block server-side downloads. If this fails, download the video yourself and use Upload Video instead.
+            </p>
+          </div>
+
           <button type="submit" id="submit-btn">
             <span id="submit-btn-text">Sign in to Process</span>
             <span class="btn-icon">
@@ -231,6 +259,8 @@
     const sheetMusic = document.getElementById('sheet-music');
     const downloads = document.getElementById('downloads');
     const youtubeInput = document.getElementById('youtube-url');
+    const videoFileInput = document.getElementById('video-file');
+    const fileLabel = document.getElementById('file-label');
 
     const framePreview = document.getElementById('frame-preview');
     const prevBtn = document.getElementById('prev-frame');
@@ -241,6 +271,30 @@
     let previewFrames = [];
     let currentFrameIndex = 0;
     let currentJobId = null;
+    let activeTab = 'upload';
+
+    // ---- Tab switching ----
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        activeTab = tab.dataset.tab;
+        document.getElementById('tab-' + activeTab).classList.add('active');
+      });
+    });
+
+    // ---- File input label update ----
+    videoFileInput.addEventListener('change', () => {
+      const uploadText = fileLabel.querySelector('.upload-text');
+      if (videoFileInput.files.length > 0) {
+        uploadText.textContent = videoFileInput.files[0].name;
+        fileLabel.classList.add('has-file');
+      } else {
+        uploadText.textContent = 'Choose a video file';
+        fileLabel.classList.remove('has-file');
+      }
+    });
 
     // ---- Animated piano keys (header decoration) ----
     const pianoKeys = document.querySelectorAll('#piano-svg rect');
@@ -284,11 +338,16 @@
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
 
-      const url = youtubeInput.value.trim();
-      if (!url) { showError('Please enter a YouTube URL.'); return; }
-
       const formData = new FormData();
-      formData.append('youtube_url', url);
+
+      if (activeTab === 'youtube') {
+        const url = youtubeInput.value.trim();
+        if (!url) { showError('Please enter a YouTube URL.'); return; }
+        formData.append('youtube_url', url);
+      } else {
+        if (!videoFileInput.files.length) { showError('Please select a video file.'); return; }
+        formData.append('video_file', videoFileInput.files[0]);
+      }
 
       // Show loading, hide others
       submitBtn.disabled = true;
@@ -451,8 +510,13 @@
           if (!currentUser) {
             e.preventDefault();
             e.stopImmediatePropagation();
-            const url = youtubeInput.value.trim();
-            if (!url) { showError('Please enter a YouTube URL.'); return; }
+            // Validate input before prompting sign-in
+            if (activeTab === 'youtube') {
+              const url = youtubeInput.value.trim();
+              if (!url) { showError('Please enter a YouTube URL.'); return; }
+            } else {
+              if (!videoFileInput.files.length) { showError('Please select a video file.'); return; }
+            }
             pendingSubmit = true;
             signInWithPopup(auth, provider).catch((err) => {
               pendingSubmit = false;

@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import tempfile
 
 import yt_dlp
 
@@ -38,8 +39,11 @@ def _find_cookies_file() -> str | None:
     """Return the first existing cookies file path, or None."""
     for path in _COOKIES_PATHS:
         if path and os.path.isfile(path):
-            log.info("Using YouTube cookies file: %s", path)
+            print(f"[cookies] Found cookies file: {path}")
             return path
+        elif path:
+            print(f"[cookies] Not found: {path}")
+    print("[cookies] No cookies file found at any known path")
     return None
 
 
@@ -60,7 +64,7 @@ def download_youtube_video(url: str, custom_filename: str | None = None) -> str:
     _check_deno()
     print(f"Downloading video from: {url}")
 
-    downloads_dir = "downloaded_videos"
+    downloads_dir = os.path.join(tempfile.gettempdir(), "downloaded_videos")
     os.makedirs(downloads_dir, exist_ok=True)
 
     filename = _resolve_filename(url, custom_filename)
@@ -76,16 +80,22 @@ def download_youtube_video(url: str, custom_filename: str | None = None) -> str:
         "outtmpl": output_path,
         "quiet": True,
         "no_warnings": True,
+        # Use web_embedded client which doesn't require PO tokens,
+        # falling back to default if needed.
+        "extractor_args": {"youtube": {
+            "player_client": ["web_embedded", "mweb"],
+        }},
     }
 
-    # Attach cookies file if available (required on cloud servers)
+    # Attach cookies file if available (helps on cloud servers)
     cookies_file = _find_cookies_file()
     if cookies_file:
         ydl_opts["cookiefile"] = cookies_file
+        print(f"[cookies] yt-dlp will use cookies from: {cookies_file}")
     else:
-        log.warning(
-            "No YouTube cookies file found. Downloads may fail on cloud servers. "
-            "See DEPLOYMENT.md § 'YouTube Cookies Setup' for instructions."
+        print(
+            "[cookies] WARNING: No YouTube cookies file found. "
+            "Downloads may fail on cloud servers."
         )
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
