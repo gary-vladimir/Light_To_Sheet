@@ -291,85 +291,39 @@ If everything works, congratulations — your app is live!
 
 ---
 
-## Step 10: YouTube Cookies Setup (Required for Cloud Run)
+## Step 10: YouTube Download Proxy (Required for YouTube URL Feature)
 
-YouTube blocks video downloads from cloud server IPs (it thinks the server is a bot). To fix this, you provide a cookies file from a real browser session so yt-dlp can authenticate as you.
+YouTube blocks video downloads from ALL cloud server IPs. The solution is a tiny proxy server running on your Mac (residential IP) exposed via a free Cloudflare Tunnel.
 
-### 10a. Export Your YouTube Cookies
+> **Note:** The **Upload Video** tab works without this setup. This step is only needed if you want the **YouTube URL** tab to work.
 
-You need a browser extension that exports cookies in **Netscape format** (the standard `cookies.txt` format).
+For full setup instructions, see **[DOWNLOAD_PROXY_SETUP.md](DOWNLOAD_PROXY_SETUP.md)**.
 
-**Recommended extension:** "Get cookies.txt LOCALLY" (available for Chrome and Firefox).
+**Quick summary:**
 
-1. Install the extension: [Chrome Web Store](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
-2. Go to [https://www.youtube.com](https://www.youtube.com) and **make sure you are signed in** to your Google account
-3. Click the extension icon in your browser toolbar
-4. Click **Export** (or "Export as cookies.txt")
-5. Save the file as `cookies.txt`
-
-> **Important:** You must be signed into YouTube in the browser when exporting. The cookies prove to YouTube that a real human authorized the download.
-
-### 10b. Upload Cookies as a Cloud Run Secret
-
-Google Cloud Secret Manager stores your cookies securely and mounts them into the container as a file.
+1. Generate an API key: `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
+2. Start the proxy: `PROXY_API_KEY=your-key python3 download_proxy.py`
+3. Install & start tunnel: `brew install cloudflared && cloudflared tunnel --url http://localhost:8787`
+4. Copy the tunnel URL and configure Cloud Run:
 
 ```bash
-# Enable the Secret Manager API
-gcloud services enable secretmanager.googleapis.com
-
-# Create the secret from your cookies file
-gcloud secrets create youtube-cookies \
-  --data-file=cookies.txt
-
-# Grant the Cloud Run service account access to the secret
-gcloud secrets add-iam-policy-binding youtube-cookies \
-  --member="serviceAccount:$(gcloud iam service-accounts list --format='value(email)' --filter='displayName:Compute Engine default')" \
-  --role="roles/secretmanager.secretAccessor"
-```
-
-### 10c. Redeploy with the Secret Mounted
-
-Now redeploy the app with the secret mounted as a file inside the container:
-
-```bash
-gcloud run deploy light-to-sheet \
-  --source . \
+gcloud run services update light-to-sheet \
   --region us-central1 \
-  --max-instances 1 \
-  --memory 2Gi \
-  --cpu 2 \
-  --timeout 900 \
-  --allow-unauthenticated \
-  --update-secrets=/secrets/youtube_cookies/cookies.txt=youtube-cookies:latest
+  --set-env-vars "DOWNLOAD_PROXY_URL=https://your-tunnel-url.trycloudflare.com,PROXY_API_KEY=your-key"
 ```
 
-The key addition is `--update-secrets` which mounts the secret at `/secrets/youtube_cookies/cookies.txt` inside the container. The app automatically detects this file and passes it to yt-dlp.
-
-### 10d. Refreshing Cookies (When They Expire)
-
-YouTube cookies typically last **several months**, but they will eventually expire. When downloads start failing again with bot-detection errors:
-
-1. Re-export cookies from your browser (repeat Step 10a)
-2. Update the secret:
-
-   ```bash
-   gcloud secrets versions add youtube-cookies \
-     --data-file=cookies.txt
-   ```
-
-3. Redeploy the app (repeat Step 10c) — Cloud Run needs a new revision to pick up the updated secret
-
-> **Tip:** You'll know cookies expired when you see "Sign in to confirm you're not a bot" in the Cloud Run logs.
+The YouTube URL tab will now route downloads through your Mac.
 
 ---
 
 ## Troubleshooting
 
-### "Sign in to confirm you're not a bot" / YouTube download fails
+### YouTube URL download fails
 
-- You need to set up YouTube cookies — see Step 10 above
-- If cookies were already set up, they may have expired — refresh them (Step 10d)
-- Check that you were signed into YouTube when you exported the cookies
+- You need the download proxy running on your Mac — see Step 10 / [DOWNLOAD_PROXY_SETUP.md](DOWNLOAD_PROXY_SETUP.md)
+- Check that both the proxy (`download_proxy.py`) and tunnel (`cloudflared`) are running
+- Check that the `DOWNLOAD_PROXY_URL` env var on Cloud Run matches the current tunnel URL
+- The **Upload Video** tab always works regardless of proxy status
 
 ### "Sign-in popup doesn't appear" or "auth/unauthorized-domain" error
 
@@ -412,11 +366,10 @@ gcloud run deploy light-to-sheet \
   --memory 2Gi \
   --cpu 2 \
   --timeout 900 \
-  --allow-unauthenticated \
-  --update-secrets=/secrets/youtube_cookies/cookies.txt=youtube-cookies:latest
+  --allow-unauthenticated
 ```
 
-It's the same command as the first deploy (with the cookies secret). Subsequent deploys are faster (3-5 minutes) because Docker layer caching kicks in.
+Subsequent deploys are faster (3-5 minutes) because Docker layer caching kicks in.
 
 ---
 

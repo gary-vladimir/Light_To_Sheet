@@ -19,3 +19,6 @@ sheet_music.txt
 .vscode
 .idea
 main.py
+download_proxy.py
+cookies.txt
+firebaseConfig.js
