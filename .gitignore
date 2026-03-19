@@ -15,6 +15,10 @@ preview_frames/
 # Downloaded videos
 downloaded_videos/
 
+# Sensitive files — never commit
+cookies.txt
+firebaseConfig.js
+
 # Temporary files
 *.tmp
 *.temp
