@@ -4,6 +4,8 @@ Detects piano key presses from Synthesia-style videos by measuring color distanc
 
 **Live app:** [light-to-sheet-2032166340.us-central1.run.app](https://light-to-sheet-2032166340.us-central1.run.app/)
 
+![Light to Sheet UI](App_UI.png)
+
 Available as a **web app** (`app.py`), a **CLI tool** (`main.py`), and a **deployed cloud service** (Google Cloud Run). All share the same processing engine in `src/`.
 
 ## Setup
