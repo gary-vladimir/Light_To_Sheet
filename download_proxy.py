@@ -24,6 +24,46 @@ app = Flask(__name__)
 
 API_KEY = os.environ.get("PROXY_API_KEY", "")
 
+# --- Piano-content filter ---
+
+_PIANO_KEYWORDS = [
+    # Core — "piano" alone matches: piano cover, piano tutorial, piano solo,
+    # grand piano, digital piano, piano lesson, etc.
+    "piano",
+    # "pianist" does NOT contain "piano" as a substring
+    "pianist",
+    # Unique terms that don't contain "piano"
+    "synthesia",
+    "sheet music",
+    "keyboard cover",
+    "keyboard tutorial",
+    # Well-known piano YouTube channels
+    "rousseau", "kassia", "animenz", "marioverehrer",
+    "pianella", "patrik pietschmann", "sheet music boss",
+    "fonzi m", "thepianoguys",
+]
+
+
+def _is_piano_video(url: str) -> bool:
+    """Check video metadata to determine if it's piano-related."""
+    try:
+        info = yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}).extract_info(
+            url, download=False,
+        )
+    except Exception:
+        return False
+
+    searchable = " ".join([
+        info.get("title", ""),
+        info.get("description", ""),
+        " ".join(info.get("tags") or []),
+        " ".join(info.get("categories") or []),
+        info.get("channel", ""),
+        info.get("uploader", ""),
+    ]).lower()
+
+    return any(kw in searchable for kw in _PIANO_KEYWORDS)
+
 
 def _check_auth():
     """Verify the Bearer token matches our API key."""
@@ -49,6 +89,10 @@ def download():
     url = data.get("url", "").strip()
     if not url:
         return jsonify({"error": "Missing 'url' field"}), 400
+
+    if not _is_piano_video(url):
+        print(f"[proxy] Rejected (not piano-related): {url}")
+        return jsonify({"error": "Video does not appear to be piano-related"}), 403
 
     # Download to a temp file
     tmp_dir = tempfile.mkdtemp(prefix="lts_proxy_")
