@@ -82,13 +82,20 @@ def _download_via_proxy(url: str, output_path: str) -> None:
 
     print(f"[proxy] Requesting download from proxy: {url}")
 
-    resp = requests.post(
-        endpoint,
-        json={"url": url},
-        headers=headers,
-        stream=True,
-        timeout=_PROXY_TIMEOUT,
-    )
+    try:
+        resp = requests.post(
+            endpoint,
+            json={"url": url},
+            headers=headers,
+            stream=True,
+            timeout=_PROXY_TIMEOUT,
+        )
+    except requests.ConnectionError:
+        raise DownloadFailedError("Cannot reach download proxy — is it running?")
+    except requests.Timeout:
+        raise DownloadFailedError("Download proxy timed out (10 min limit)")
+    except requests.RequestException as e:
+        raise DownloadFailedError(f"Proxy request failed: {e}")
 
     if resp.status_code != 200:
         try:
@@ -100,9 +107,14 @@ def _download_via_proxy(url: str, output_path: str) -> None:
         raise DownloadFailedError(detail)
 
     # Stream response body to disk
-    with open(output_path, "wb") as f:
-        for chunk in resp.iter_content(chunk_size=1024 * 1024):
-            f.write(chunk)
+    try:
+        with open(output_path, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                f.write(chunk)
+    except requests.RequestException as e:
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        raise DownloadFailedError(f"Download stream interrupted: {e}")
 
     size = os.path.getsize(output_path)
     if size < 100_000:
