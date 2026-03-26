@@ -13,9 +13,11 @@ See DOWNLOAD_PROXY_SETUP.md for full setup instructions.
 
 from __future__ import annotations
 
+import glob
 import os
 import shutil
 import tempfile
+import time
 
 import yt_dlp
 from flask import Flask, jsonify, request, send_file
@@ -131,9 +133,18 @@ def download():
 
 @app.after_request
 def _cleanup(response):
-    """Clean up temp files after the response is sent."""
-    # Flask/Werkzeug closes the file after streaming, so we schedule cleanup
-    # via a callback. For simplicity, temp dirs are cleaned on next request.
+    """Clean up old temp directories from previous requests.
+
+    The current request's temp dir may still be streaming, so we only
+    delete directories older than 5 minutes.
+    """
+    cutoff = time.time() - 300  # 5 minutes ago
+    for tmp_dir in glob.glob(os.path.join(tempfile.gettempdir(), "lts_proxy_*")):
+        try:
+            if os.path.getmtime(tmp_dir) < cutoff:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+        except OSError:
+            pass
     return response
 
 
