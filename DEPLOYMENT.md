@@ -1,14 +1,16 @@
 # Deployment Guide: Light to Sheet
 
-This guide walks you through deploying Light to Sheet as a public web app with Google Sign-In authentication. By the end, you'll have a live URL anyone can visit.
+This guide walks you through deploying Light to Sheet as a public web app with Google Sign-In authentication, served on a custom domain.
 
 **What you'll set up:**
 
-- Firebase Authentication (Google Sign-In) - handles user login
-- Google Cloud Run - hosts your app, scales automatically
+- Firebase Authentication (Google Sign-In) — handles user login
+- Google Cloud Run — hosts your app, scales automatically
+- Custom domain (`video2notes.app`) — your app's public address
+- YouTube download proxy — routes YouTube downloads through your Mac
 - Total monthly cost: **$0** (free tier)
 
-**Time required:** ~30 minutes
+**Time required:** ~45 minutes
 
 ---
 
@@ -16,8 +18,8 @@ This guide walks you through deploying Light to Sheet as a public web app with G
 
 - A Google account (Gmail)
 - A credit card for Google Cloud verification (you will NOT be charged — it's only for identity verification, and we stay within the free tier)
+- A domain on Cloudflare (we use `video2notes.app`, purchased through Cloudflare Registrar)
 - Git installed on your machine
-- Your code pushed to a GitHub repository (recommended but not required)
 
 ---
 
@@ -109,18 +111,7 @@ const firebaseConfig = {
 };
 ```
 
-Replace the placeholder values with the real values from Step 3c. For example:
-
-```javascript
-const firebaseConfig = {
-  apiKey: "AIzaSyB1234567890abcdefg",
-  authDomain: "light-to-sheet.firebaseapp.com",
-  projectId: "light-to-sheet",
-  appId: "1:123456789:web:abcdef123456",
-};
-```
-
-Save the file.
+Replace the placeholder values with the real values from Step 3c. Save the file.
 
 ---
 
@@ -139,10 +130,6 @@ curl https://sdk.cloud.google.com | bash
 ```
 
 Then restart your terminal.
-
-### Windows
-
-Download the installer from: [https://cloud.google.com/sdk/docs/install](https://cloud.google.com/sdk/docs/install)
 
 ### Verify Installation
 
@@ -172,7 +159,7 @@ When `gcloud auth login` runs, it will open your browser. Sign in with the same 
 
 ## Step 6: Enable Required APIs
 
-These APIs need to be turned on before deploying. Run both commands:
+These APIs need to be turned on before deploying. Run all three commands:
 
 ```bash
 # Cloud Run API (hosts your app)
@@ -194,22 +181,18 @@ Each command takes about 10-30 seconds. You'll see "Operation finished successfu
 Make sure you are in the project root directory (where `Dockerfile` is located):
 
 ```bash
-cd /path/to/Light_To_Sheet
+cd ~/Documents/Light_To_Sheet
 ```
 
-Grant Storage access
+Grant Storage and Cloud Build access (replace the project number if yours is different):
 
 ```bash
 gcloud projects add-iam-policy-binding light-to-sheet \
-  --member='serviceAccount:2032166340-compute@developer.gserviceaccount.com' \
+  --member='serviceAccount:<PROJECT_NUMBER>-compute@developer.gserviceaccount.com' \
   --role='roles/storage.admin'
-```
 
-Grant Cloud Build access
-
-```bash
 gcloud projects add-iam-policy-binding light-to-sheet \
-  --member='serviceAccount:2032166340-compute@developer.gserviceaccount.com' \
+  --member='serviceAccount:<PROJECT_NUMBER>-compute@developer.gserviceaccount.com' \
   --role='roles/cloudbuild.builds.builder'
 ```
 
@@ -244,41 +227,118 @@ gcloud run deploy light-to-sheet \
 - If asked to enable APIs, type **Y** and press Enter
 - The first deployment takes 5-10 minutes (building the Docker image)
 
-**When it finishes**, you'll see output like:
-
-```
-Service [light-to-sheet] revision [light-to-sheet-00001-abc] has been deployed
-and is serving 100 percent of traffic.
-
-Service URL: https://light-to-sheet-abc123-uc.a.run.app
-```
-
-**Copy that Service URL** — this is your live public URL!
+**When it finishes**, you'll see the Service URL (e.g., `https://light-to-sheet-xxxxx-uc.a.run.app`).
 
 ---
 
-## Step 8: Add Your URL to Firebase Authorized Domains
+## Step 8: Add Authorized Domains to Firebase
 
-Firebase needs to know your Cloud Run URL is legitimate, otherwise the Google Sign-In popup will refuse to work.
+Firebase needs to know which domains are legitimate for Google Sign-In.
 
 1. Go to [Firebase Console](https://console.firebase.google.com) and select your project
 2. Click **Authentication** in the left sidebar
 3. Click the **Settings** tab
 4. Click **Authorized domains**
-5. Click **Add domain**
-6. Paste your Cloud Run URL **without the `https://`**. For example:
-
-   ```
-   light-to-sheet-abc123-uc.a.run.app
-   ```
-
-7. Click **Add**
+5. Add **both** of these domains (without `https://`):
+   - Your Cloud Run URL: `light-to-sheet-xxxxx-uc.a.run.app`
+   - Your custom domain: `video2notes.app`
+6. Click **Add** for each
 
 ---
 
-## Step 9: Test Your Deployment
+## Step 9: Set Up Custom Domain
 
-1. Open your Service URL in a browser (the URL from Step 7)
+### 9a. Verify Domain Ownership
+
+Google Cloud needs to verify you own the domain:
+
+```bash
+gcloud domains verify video2notes.app
+```
+
+This opens a browser to Google Search Console. It will ask you to add a DNS TXT record.
+
+Go to **Cloudflare dashboard → video2notes.app → DNS** and add the TXT record it provides:
+
+| Type | Name | Content |
+|------|------|---------|
+| `TXT` | `@` | `google-site-verification=xxxxxxxxxxxx` |
+
+Wait 1-2 minutes, then click **Verify** in the browser.
+
+### 9b. Create Domain Mapping
+
+```bash
+gcloud beta run domain-mappings create \
+  --service light-to-sheet \
+  --domain video2notes.app \
+  --region us-central1
+```
+
+### 9c. Add DNS Records in Cloudflare
+
+The command above prints the required DNS records. Go to **Cloudflare dashboard → video2notes.app → DNS** and add the A records:
+
+| Type | Name | Content | Proxy status |
+|------|------|---------|--------------|
+| `A` | `@` | `216.239.32.21` | DNS only (grey cloud) |
+| `A` | `@` | `216.239.34.21` | DNS only (grey cloud) |
+| `A` | `@` | `216.239.36.21` | DNS only (grey cloud) |
+| `A` | `@` | `216.239.38.21` | DNS only (grey cloud) |
+
+> **Important:** The proxy toggle must be set to **DNS only** (grey cloud icon, not orange). If Cloudflare proxies the traffic (orange cloud), Google's SSL certificate provisioning will fail.
+
+### 9d. Wait for SSL Certificate
+
+Google automatically provisions an SSL certificate. This can take **15-30 minutes** for a new domain.
+
+Check the status:
+
+```bash
+gcloud beta run domain-mappings describe \
+  --domain video2notes.app \
+  --region us-central1
+```
+
+Look for `CertificateProvisioned` — when its `status` changes from `Unknown` to `True`, your domain is live.
+
+You can also verify DNS propagation:
+
+```bash
+dig video2notes.app A +short
+# Should return: 216.239.32.21, 216.239.34.21, 216.239.36.21, 216.239.38.21
+```
+
+---
+
+## Step 10: YouTube Download Proxy
+
+YouTube blocks video downloads from ALL cloud server IPs. The solution is a tiny proxy server running on your Mac (residential IP) exposed via a permanent Cloudflare Tunnel.
+
+> **Note:** The **Upload Video** tab works without this setup. This step is only needed if you want the **YouTube URL** tab to work.
+
+For full setup instructions, see **[DOWNLOAD_PROXY_SETUP.md](DOWNLOAD_PROXY_SETUP.md)**.
+
+**Quick summary:**
+
+1. Generate an API key: `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
+2. Start the proxy: `PROXY_API_KEY=your-key python3 download_proxy.py`
+3. Start the permanent tunnel: `cloudflared tunnel run piano-proxy`
+4. Configure Cloud Run with the permanent proxy URL:
+
+```bash
+gcloud run services update light-to-sheet \
+  --region us-central1 \
+  --set-env-vars "DOWNLOAD_PROXY_URL=https://proxy.video2notes.app,PROXY_API_KEY=your-key"
+```
+
+The proxy URL `proxy.video2notes.app` is permanent — it never changes when you restart the tunnel.
+
+---
+
+## Step 11: Test Your Deployment
+
+1. Open [https://video2notes.app](https://video2notes.app) in a browser
 2. You should see the Light to Sheet app with "Sign in to Process" button
 3. Paste a YouTube URL of a Synthesia piano video
 4. Click "Sign in to Process"
@@ -291,28 +351,62 @@ If everything works, congratulations — your app is live!
 
 ---
 
-## Step 10: YouTube Download Proxy (Required for YouTube URL Feature)
+## How to Redeploy After Code Changes
 
-YouTube blocks video downloads from ALL cloud server IPs. The solution is a tiny proxy server running on your Mac (residential IP) exposed via a free Cloudflare Tunnel.
-
-> **Note:** The **Upload Video** tab works without this setup. This step is only needed if you want the **YouTube URL** tab to work.
-
-For full setup instructions, see **[DOWNLOAD_PROXY_SETUP.md](DOWNLOAD_PROXY_SETUP.md)**.
-
-**Quick summary:**
-
-1. Generate an API key: `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
-2. Start the proxy: `PROXY_API_KEY=your-key python3 download_proxy.py`
-3. Install & start tunnel: `brew install cloudflared && cloudflared tunnel --url http://localhost:8787`
-4. Copy the tunnel URL and configure Cloud Run:
+Whenever you make changes to your code and want to update the live app:
 
 ```bash
-gcloud run services update light-to-sheet \
+cd ~/Documents/Light_To_Sheet
+gcloud run deploy light-to-sheet \
+  --source . \
   --region us-central1 \
-  --set-env-vars "DOWNLOAD_PROXY_URL=https://your-tunnel-url.trycloudflare.com,PROXY_API_KEY=your-key"
+  --max-instances 1 \
+  --memory 2Gi \
+  --cpu 2 \
+  --timeout 900 \
+  --allow-unauthenticated
 ```
 
-The YouTube URL tab will now route downloads through your Mac.
+Subsequent deploys are faster (3-5 minutes) because Docker layer caching kicks in.
+
+> **Note:** This preserves your existing environment variables (PROXY_API_KEY, DOWNLOAD_PROXY_URL). You only need to set those again if you're changing them.
+
+---
+
+## Architecture Overview
+
+```
+                    ┌──────────────────────┐
+                    │   video2notes.app     │
+                    │   (Cloud Run)         │
+ User ────────────► │                      │
+                    │   Flask + Firebase    │
+                    │   Auth + OpenCV       │
+                    └──────────┬───────────┘
+                               │ YouTube URL?
+                               ▼
+                    ┌──────────────────────┐
+                    │ proxy.video2notes.app │
+                    │ (Cloudflare Tunnel)   │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │   Your Mac           │
+                    │   download_proxy.py  │
+                    │   (residential IP)   │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │   YouTube            │
+                    └──────────────────────┘
+```
+
+| URL | What it serves |
+|-----|----------------|
+| `video2notes.app` | The main web app (Cloud Run) |
+| `proxy.video2notes.app` | YouTube download proxy (your Mac via Cloudflare Tunnel) |
 
 ---
 
@@ -321,14 +415,14 @@ The YouTube URL tab will now route downloads through your Mac.
 ### YouTube URL download fails
 
 - You need the download proxy running on your Mac — see Step 10 / [DOWNLOAD_PROXY_SETUP.md](DOWNLOAD_PROXY_SETUP.md)
-- Check that both the proxy (`download_proxy.py`) and tunnel (`cloudflared`) are running
-- Check that the `DOWNLOAD_PROXY_URL` env var on Cloud Run matches the current tunnel URL
+- Check that both the proxy (`download_proxy.py`) and tunnel (`cloudflared tunnel run piano-proxy`) are running
+- Check that the `DOWNLOAD_PROXY_URL` env var on Cloud Run is set to `https://proxy.video2notes.app`
 - The **Upload Video** tab always works regardless of proxy status
 
 ### "Sign-in popup doesn't appear" or "auth/unauthorized-domain" error
 
-- Make sure you added your Cloud Run URL to Firebase Authorized Domains (Step 8)
-- Make sure the URL doesn't include `https://` when adding it
+- Make sure you added both `video2notes.app` and your Cloud Run URL to Firebase Authorized Domains (Step 8)
+- Make sure the URLs don't include `https://` when adding them
 
 ### "Processing failed" error
 
@@ -345,31 +439,17 @@ The YouTube URL tab will now route downloads through your Mac.
 - The Firebase config in `index.html` might be wrong — double-check the values from Step 3c
 - Clear your browser cache and try again
 
+### Custom domain shows "site can't be reached"
+
+- Verify DNS records are set: `dig video2notes.app A +short`
+- Make sure the Cloudflare proxy toggle is **DNS only** (grey cloud, not orange)
+- SSL certificate provisioning can take 15-30 minutes for new domains
+
 ### App is slow to load (10-30 seconds)
 
 - This is a **cold start** — the container needs to boot up when it hasn't been used recently
 - Subsequent requests within 15 minutes will be fast
 - This is normal for the free tier (the server scales to zero when idle to save cost)
-
----
-
-## How to Redeploy After Code Changes
-
-Whenever you make changes to your code and want to update the live app:
-
-```bash
-cd /path/to/Light_To_Sheet
-gcloud run deploy light-to-sheet \
-  --source . \
-  --region us-central1 \
-  --max-instances 1 \
-  --memory 2Gi \
-  --cpu 2 \
-  --timeout 900 \
-  --allow-unauthenticated
-```
-
-Subsequent deploys are faster (3-5 minutes) because Docker layer caching kicks in.
 
 ---
 
@@ -381,15 +461,15 @@ Subsequent deploys are faster (3-5 minutes) because Docker layer caching kicks i
 | Cloud Run | 180,000 vCPU-seconds/month | ~750 video requests (2 min each) | **$0** |
 | Cloud Build | 120 build-minutes/day | A few deploys | **$0** |
 | Artifact Registry | 500 MB storage | 1 Docker image (~1 GB, but within free tier) | **$0** |
-| **Total** | | | **$0/month** |
+| Cloudflare Tunnel | Unlimited | Always-on tunnel | **$0** |
+| Cloudflare Domain | ~$10-15/year | `video2notes.app` | **~$1/month** |
+| **Total** | | | **~$1/month** |
 
 Plus your **$300 free credit** covers the first 90 days regardless.
 
 ---
 
 ## Scaling Up Later (If Your App Gets Popular)
-
-When you start getting more traffic and need to handle multiple users at once:
 
 1. **Allow more instances:**
 
@@ -419,6 +499,9 @@ When you start getting more traffic and need to handle multiple users at once:
 # Check your deployment status
 gcloud run services describe light-to-sheet --region us-central1
 
+# Check custom domain status
+gcloud beta run domain-mappings describe --domain video2notes.app --region us-central1
+
 # View live logs
 gcloud run services logs read light-to-sheet --region us-central1 --limit 50
 
@@ -430,6 +513,9 @@ gcloud run services delete light-to-sheet --region us-central1
 
 # List all deployed services
 gcloud run services list
+
+# Check proxy tunnel status
+cloudflared tunnel info piano-proxy
 ```
 
 ---
