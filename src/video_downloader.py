@@ -39,7 +39,8 @@ class DownloadFailedError(RuntimeError):
 
 _PROXY_URL = os.environ.get("DOWNLOAD_PROXY_URL", "").rstrip("/")
 _PROXY_KEY = os.environ.get("PROXY_API_KEY", "")
-_PROXY_TIMEOUT = 600  # 10 min — video downloads can be slow
+_PROXY_CONNECT_TIMEOUT = 30   # 30s to establish connection
+_PROXY_READ_TIMEOUT = 600     # 10 min for the full download stream
 
 
 def download_youtube_video(url: str, job_dir: str) -> str:
@@ -79,7 +80,7 @@ def _download_via_proxy(url: str, output_path: str) -> None:
             json={"url": url},
             headers=headers,
             stream=True,
-            timeout=_PROXY_TIMEOUT,
+            timeout=(_PROXY_CONNECT_TIMEOUT, _PROXY_READ_TIMEOUT),
         )
     except requests.ConnectionError:
         raise DownloadFailedError("Cannot reach download proxy — is it running?")
