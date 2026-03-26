@@ -24,6 +24,18 @@ import requests
 import yt_dlp
 
 
+# --- Custom Exceptions ---
+
+class NotPianoError(RuntimeError):
+    """The video does not appear to be piano-related."""
+    pass
+
+
+class DownloadFailedError(RuntimeError):
+    """The video download failed (network, proxy, yt-dlp)."""
+    pass
+
+
 # --- Configuration ---
 
 _PROXY_URL = os.environ.get("DOWNLOAD_PROXY_URL", "").rstrip("/")
@@ -39,7 +51,7 @@ def download_youtube_video(url: str, custom_filename: str | None = None) -> str:
     """
     video_id = _extract_video_id(url)
     if not video_id:
-        raise RuntimeError(f"Could not extract video ID from: {url}")
+        raise DownloadFailedError(f"Could not extract video ID from: {url}")
 
     downloads_dir = os.path.join(tempfile.gettempdir(), "downloaded_videos")
     os.makedirs(downloads_dir, exist_ok=True)
@@ -83,7 +95,9 @@ def _download_via_proxy(url: str, output_path: str) -> None:
             detail = resp.json().get("error", resp.text)
         except Exception:
             detail = resp.text
-        raise RuntimeError(f"Download proxy error ({resp.status_code}): {detail}")
+        if resp.status_code == 403 and "piano" in detail.lower():
+            raise NotPianoError(detail)
+        raise DownloadFailedError(detail)
 
     # Stream response body to disk
     with open(output_path, "wb") as f:
@@ -93,7 +107,7 @@ def _download_via_proxy(url: str, output_path: str) -> None:
     size = os.path.getsize(output_path)
     if size < 100_000:
         os.remove(output_path)
-        raise RuntimeError(f"Proxy returned a file too small ({size} bytes)")
+        raise DownloadFailedError(f"Proxy returned a file too small ({size} bytes)")
 
     print(f"[proxy] Downloaded {size / 1024 / 1024:.1f} MB → {output_path}")
 
@@ -115,7 +129,7 @@ def _download_via_ytdlp(url: str, output_path: str) -> None:
         ydl.download([url])
 
     if not os.path.exists(output_path):
-        raise RuntimeError("yt-dlp finished but no file was created")
+        raise DownloadFailedError("yt-dlp finished but no file was created")
 
     print(f"[yt-dlp] Downloaded → {output_path}")
 

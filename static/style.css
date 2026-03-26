@@ -27,6 +27,9 @@
   --error: #ff6b6b;
   --error-bg: rgba(255, 107, 107, 0.08);
   --error-border: rgba(255, 107, 107, 0.2);
+  --notice: #fdcb6e;
+  --notice-bg: rgba(253, 203, 110, 0.06);
+  --notice-border: rgba(253, 203, 110, 0.18);
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
@@ -653,35 +656,85 @@ input[type="url"]:focus {
   50% { opacity: 0.8; }
 }
 
-/* --- Error --- */
+/* --- Error / Notice --- */
 #error {
+  position: relative;
   margin-top: 1rem;
-  padding: 1rem 1.25rem;
-  background: var(--error-bg);
-  border: 1px solid var(--error-border);
+  padding: 1.25rem 1.5rem;
+  padding-right: 2.75rem;
   border-radius: var(--radius-md);
-  color: var(--error);
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  animation: shakeIn 0.4s ease;
+  align-items: flex-start;
+  gap: 0.85rem;
+  animation: fadeSlideIn 0.35s ease both;
 }
 
-@keyframes shakeIn {
-  0% { transform: translateX(-10px); opacity: 0; }
-  25% { transform: translateX(5px); }
-  50% { transform: translateX(-3px); }
-  75% { transform: translateX(1px); }
-  100% { transform: translateX(0); opacity: 1; }
+/* Variant: red error */
+#error.error--danger {
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  color: var(--error);
 }
+#error.error--danger .error-icon { color: var(--error); }
+#error.error--danger .error-title { color: var(--error); }
+#error.error--danger .error-detail { color: rgba(255, 107, 107, 0.8); }
+#error.error--danger .error-suggestion { color: var(--text-secondary); }
+
+/* Variant: amber notice */
+#error.error--notice {
+  background: var(--notice-bg);
+  border: 1px solid var(--notice-border);
+  color: var(--notice);
+}
+#error.error--notice .error-icon { color: var(--notice); }
+#error.error--notice .error-title { color: var(--notice); }
+#error.error--notice .error-detail { color: rgba(253, 203, 110, 0.75); }
+#error.error--notice .error-suggestion { color: var(--text-secondary); }
 
 .error-icon {
   flex-shrink: 0;
+  margin-top: 1px;
 }
 
-#error p {
-  font-size: 0.9rem;
+.error-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.error-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+}
+
+.error-detail {
+  font-size: 0.85rem;
   line-height: 1.5;
+}
+
+.error-suggestion {
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.error-dismiss {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.4;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: opacity var(--transition-fast);
+  line-height: 0;
+}
+.error-dismiss:hover {
+  opacity: 1;
 }
 
 /* --- Results Section --- */

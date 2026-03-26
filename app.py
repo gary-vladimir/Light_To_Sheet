@@ -22,7 +22,7 @@ import firebase_admin
 from firebase_admin import auth as firebase_auth
 from flask import Flask, jsonify, render_template, request, send_file
 
-from src.video_downloader import download_youtube_video
+from src.video_downloader import download_youtube_video, NotPianoError, DownloadFailedError
 from src.video_processor import preprocess_video, process_video
 
 app = Flask(__name__)
@@ -95,9 +95,23 @@ def api_process():
 
     try:
         video_path = _get_input_video(request, job_dir)
+    except NotPianoError:
+        shutil.rmtree(job_dir, ignore_errors=True)
+        return jsonify({
+            "error_type": "not_piano",
+            "error": "This video doesn't appear to be piano-related",
+            "detail": "We check the video's title, description, tags, and channel for piano-related content.",
+        }), 400
+    except DownloadFailedError as e:
+        shutil.rmtree(job_dir, ignore_errors=True)
+        return jsonify({
+            "error_type": "download_failed",
+            "error": "Couldn't download this video",
+            "detail": str(e),
+        }), 400
     except ValueError as e:
         shutil.rmtree(job_dir, ignore_errors=True)
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error_type": "validation", "error": str(e)}), 400
 
     # Preprocess and process
     processed_path = os.path.join(job_dir, "processed.mp4")
@@ -111,7 +125,11 @@ def api_process():
         )
     except Exception as e:
         shutil.rmtree(job_dir, ignore_errors=True)
-        return jsonify({"error": f"Processing failed: {e}"}), 500
+        return jsonify({
+            "error_type": "processing_failed",
+            "error": "Something went wrong while processing the video",
+            "detail": str(e),
+        }), 500
     finally:
         # Clean up the large preprocessed file (keep output files)
         if os.path.exists(processed_path):
@@ -197,10 +215,7 @@ def _get_input_video(req, job_dir: str) -> str:
     video_file = req.files.get("video_file")
 
     if youtube_url:
-        try:
-            return download_youtube_video(youtube_url)
-        except Exception as e:
-            raise ValueError(f"Failed to download video: {e}") from e
+        return download_youtube_video(youtube_url)
 
     if video_file and video_file.filename:
         input_path = os.path.join(job_dir, "input.mp4")

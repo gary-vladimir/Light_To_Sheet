@@ -185,12 +185,17 @@
         </div>
       </div>
 
-      <!-- Error message -->
+      <!-- Error / Notice message -->
       <div id="error" class="hidden">
-        <span class="error-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-        </span>
-        <p id="error-text"></p>
+        <button type="button" class="error-dismiss" id="error-dismiss" aria-label="Dismiss">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <span class="error-icon" id="error-icon"></span>
+        <div class="error-body">
+          <p class="error-title" id="error-title"></p>
+          <p class="error-detail" id="error-detail"></p>
+          <p class="error-suggestion hidden" id="error-suggestion"></p>
+        </div>
       </div>
 
       <!-- Results -->
@@ -254,7 +259,11 @@
     const inputCard = document.getElementById('input-card');
     const loading = document.getElementById('loading');
     const error = document.getElementById('error');
-    const errorText = document.getElementById('error-text');
+    const errorIcon = document.getElementById('error-icon');
+    const errorTitle = document.getElementById('error-title');
+    const errorDetail = document.getElementById('error-detail');
+    const errorSuggestion = document.getElementById('error-suggestion');
+    const errorDismiss = document.getElementById('error-dismiss');
     const results = document.getElementById('results');
     const sheetMusic = document.getElementById('sheet-music');
     const downloads = document.getElementById('downloads');
@@ -364,7 +373,7 @@
         const data = await resp.json();
 
         if (!resp.ok) {
-          showError(data.error || 'Processing failed.');
+          showError(data.error_type ? data : (data.error || 'Processing failed.'));
           return;
         }
 
@@ -443,13 +452,74 @@
       }
     });
 
-    function showError(msg) {
-      errorText.textContent = msg;
+    // ---- Error display system ----
+    const ICON_X_CIRCLE = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+    const ICON_MUSIC = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+    const ICON_CLOUD_OFF = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>';
+    const ICON_ALERT = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
+    const ERROR_CONFIG = {
+      not_piano: {
+        title: 'Not a piano video',
+        icon: ICON_MUSIC,
+        cssClass: 'error--notice',
+        suggestion: 'This app is built for Synthesia-style piano tutorials. Try a video with "piano" or "Synthesia" in the title.',
+      },
+      download_failed: {
+        title: 'Download failed',
+        icon: ICON_CLOUD_OFF,
+        cssClass: 'error--danger',
+        suggestion: 'YouTube may block cloud downloads. Try downloading the video yourself and use the Upload Video tab instead.',
+      },
+      processing_failed: {
+        title: 'Processing failed',
+        icon: ICON_ALERT,
+        cssClass: 'error--danger',
+        suggestion: 'Try a different video or a shorter clip. If this keeps happening, the video format may not be supported.',
+      },
+    };
+
+    function showError(msgOrData) {
+      let title, detail, suggestion, cssClass, iconHtml;
+
+      if (typeof msgOrData === 'object' && msgOrData.error_type) {
+        const config = ERROR_CONFIG[msgOrData.error_type] || {};
+        title = config.title || 'Error';
+        detail = msgOrData.error || '';
+        suggestion = config.suggestion || null;
+        cssClass = config.cssClass || 'error--danger';
+        iconHtml = config.icon || ICON_X_CIRCLE;
+      } else {
+        title = '';
+        detail = typeof msgOrData === 'string' ? msgOrData : 'An error occurred.';
+        suggestion = null;
+        cssClass = 'error--danger';
+        iconHtml = ICON_X_CIRCLE;
+      }
+
+      error.classList.remove('error--notice', 'error--danger');
+      error.classList.add(cssClass);
+      errorIcon.innerHTML = iconHtml;
+      errorTitle.textContent = title;
+      errorTitle.style.display = title ? '' : 'none';
+      errorDetail.textContent = detail;
+
+      if (suggestion) {
+        errorSuggestion.textContent = suggestion;
+        errorSuggestion.classList.remove('hidden');
+      } else {
+        errorSuggestion.classList.add('hidden');
+      }
+
       error.classList.remove('hidden');
       loading.classList.add('hidden');
       submitBtn.disabled = false;
       clearInterval(msgInterval);
     }
+
+    errorDismiss.addEventListener('click', () => {
+      error.classList.add('hidden');
+    });
 
     // ---- Firebase Auth Integration ----
     (function initFirebaseAuth() {
