@@ -17,7 +17,6 @@ See DOWNLOAD_PROXY_SETUP.md for production proxy setup.
 from __future__ import annotations
 
 import os
-import tempfile
 from urllib.parse import urlparse, parse_qs
 
 import requests
@@ -43,25 +42,17 @@ _PROXY_KEY = os.environ.get("PROXY_API_KEY", "")
 _PROXY_TIMEOUT = 600  # 10 min — video downloads can be slow
 
 
-def download_youtube_video(url: str, custom_filename: str | None = None) -> str:
+def download_youtube_video(url: str, job_dir: str) -> str:
     """Download a YouTube video and return the local file path.
 
     Uses the download proxy in production, yt-dlp directly in local dev.
-    Results are cached — the same URL won't be downloaded twice.
+    The video is downloaded into job_dir so it's cleaned up with the job.
     """
     video_id = _extract_video_id(url)
     if not video_id:
         raise DownloadFailedError(f"Could not extract video ID from: {url}")
 
-    downloads_dir = os.path.join(tempfile.gettempdir(), "downloaded_videos")
-    os.makedirs(downloads_dir, exist_ok=True)
-
-    filename = _sanitize(custom_filename or video_id)
-    output_path = os.path.join(downloads_dir, f"{filename}.mp4")
-
-    if os.path.exists(output_path):
-        print(f"[download] Cached: {output_path}")
-        return output_path
+    output_path = os.path.join(job_dir, "downloaded.mp4")
 
     if _PROXY_URL:
         _download_via_proxy(url, output_path)
@@ -171,8 +162,3 @@ def _extract_video_id(url: str) -> str | None:
         return parsed.path.lstrip("/").split("/")[0].split("?")[0]
 
     return None
-
-
-def _sanitize(name: str) -> str:
-    """Remove unsafe characters from a filename."""
-    return "".join(c for c in name if c.isalnum() or c in (" ", "-", "_")).strip() or "video"

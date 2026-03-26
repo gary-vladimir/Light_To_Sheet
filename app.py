@@ -133,13 +133,11 @@ def api_process():
             "detail": detail,
         }), 500
     finally:
-        # Clean up the large preprocessed file (keep output files)
-        if os.path.exists(processed_path):
-            os.remove(processed_path)
-        # Clean up uploaded input file
-        input_file = os.path.join(job_dir, "input.mp4")
-        if os.path.exists(input_file):
-            os.remove(input_file)
+        # Clean up large video files (keep output files)
+        for vid_name in ("processed.mp4", "input.mp4", "downloaded.mp4"):
+            vid_path = os.path.join(job_dir, vid_name)
+            if os.path.exists(vid_path):
+                os.remove(vid_path)
 
     # Read sheet music for inline display
     sheet_music_path = os.path.join(job_dir, "sheet_music.txt")
@@ -217,7 +215,7 @@ def _get_input_video(req, job_dir: str) -> str:
     video_file = req.files.get("video_file")
 
     if youtube_url:
-        return download_youtube_video(youtube_url)
+        return download_youtube_video(youtube_url, job_dir)
 
     if video_file and video_file.filename:
         input_path = os.path.join(job_dir, "input.mp4")

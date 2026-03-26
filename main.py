@@ -51,11 +51,9 @@ def _get_youtube_video() -> str | None:
         print("Error: No URL provided")
         return None
 
-    custom_title = input(
-        "Enter a custom filename for the video (or press Enter to use video ID): "
-    ).strip() or None
-
-    return download_youtube_video(url, custom_title)
+    download_dir = os.path.join(tempfile.gettempdir(), "lts_cli_download")
+    os.makedirs(download_dir, exist_ok=True)
+    return download_youtube_video(url, download_dir)
 
 
 def _get_local_video() -> str | None:
