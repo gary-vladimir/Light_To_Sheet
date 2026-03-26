@@ -2,11 +2,11 @@
 
 YouTube blocks video downloads from cloud server IPs (GCP, AWS, etc.).
 This guide sets up a tiny proxy on your Mac that downloads videos using
-your residential IP and sends them to Cloud Run via a free Cloudflare Tunnel.
+your residential IP and sends them to Cloud Run via a Cloudflare Tunnel.
 
 ```
-User → Cloud Run → Cloudflare Tunnel → Your Mac → YouTube
-                                         (yt-dlp)
+User → Cloud Run (video2notes.app) → Cloudflare Tunnel → Your Mac → YouTube
+                                      (proxy.video2notes.app)   (yt-dlp)
 ```
 
 **Cost: $0** — Cloudflare Tunnel is free. Your Mac is already running.
@@ -19,6 +19,7 @@ User → Cloud Run → Cloudflare Tunnel → Your Mac → YouTube
 - `yt-dlp` and `flask` installed (`pip install yt-dlp flask`)
 - `cloudflared` CLI (installed below)
 - Deno installed (`brew install deno`) — required by yt-dlp for YouTube
+- A domain on Cloudflare (we use `video2notes.app`)
 
 ---
 
@@ -31,7 +32,7 @@ using your proxy. Run this to generate one:
 python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-Save the output — you'll need it in steps 2 and 5. Example:
+Save the output — you'll need it in steps 2 and 6. Example:
 ```
 aB3dEf_GhIjKlMnOpQrStUvWxYz1234567890abc
 ```
@@ -69,44 +70,94 @@ brew install cloudflared
 
 ---
 
-## Step 4: Start the Tunnel
-
-In a **new terminal** (keep the proxy running):
+## Step 4: Authenticate cloudflared
 
 ```bash
-cloudflared tunnel --url http://localhost:8787
+cloudflared tunnel login
 ```
 
-Cloudflared will print something like:
-```
-Your quick Tunnel has been created! Visit it at:
-  https://random-words-here.trycloudflare.com
-```
-
-**Copy that URL** — that's your proxy's public address.
-
-> **Note:** The URL changes every time you restart `cloudflared`.
-> For a permanent URL, set up a named tunnel (see "Optional: Permanent Tunnel" below).
+A browser window opens — select your domain (e.g., `video2notes.app`).
+The terminal will print "You have successfully logged in" when done.
 
 ---
 
-## Step 5: Configure Cloud Run
+## Step 5: Create a Named Tunnel
+
+```bash
+cloudflared tunnel create piano-proxy
+```
+
+This prints a **Tunnel ID** (a UUID like `abcd1234-5678-...`). Note it — you
+need it for the config file. It also creates a credentials JSON file at
+`~/.cloudflared/<TUNNEL_ID>.json`.
+
+---
+
+## Step 6: Configure the Tunnel
+
+Create the config file at `~/.cloudflared/config.yml`:
+
+```yaml
+tunnel: <TUNNEL_ID>
+credentials-file: /Users/<YOUR_USERNAME>/.cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  - hostname: proxy.video2notes.app
+    service: http://localhost:8787
+  - service: http_status:404
+```
+
+Replace `<TUNNEL_ID>` with the UUID from step 5, and `<YOUR_USERNAME>` with
+your macOS username.
+
+---
+
+## Step 7: Add DNS Record
+
+This creates a CNAME record pointing `proxy.video2notes.app` to your tunnel:
+
+```bash
+cloudflared tunnel route dns piano-proxy proxy.video2notes.app
+```
+
+---
+
+## Step 8: Start the Tunnel
+
+In a **new terminal** (keep the proxy running from step 2):
+
+```bash
+cloudflared tunnel run piano-proxy
+```
+
+---
+
+## Step 9: Test It
+
+```bash
+curl https://proxy.video2notes.app/health
+# → {"status":"ok"}
+```
+
+---
+
+## Step 10: Configure Cloud Run
 
 Set the proxy URL and API key as environment variables on your Cloud Run service:
 
 ```bash
 gcloud run services update light-to-sheet \
   --region us-central1 \
-  --set-env-vars "DOWNLOAD_PROXY_URL=https://your-tunnel-url.trycloudflare.com,PROXY_API_KEY=your-secret-from-step-1"
+  --set-env-vars "DOWNLOAD_PROXY_URL=https://proxy.video2notes.app,PROXY_API_KEY=your-secret-from-step-1"
 ```
 
 **That's it!** The YouTube URL tab on your web app will now work.
 
 ---
 
-## Step 6: Test It
+## Step 11: End-to-End Test
 
-1. Go to your app: https://light-to-sheet-2032166340.us-central1.run.app/
+1. Go to your app: [https://video2notes.app](https://video2notes.app)
 2. Click the **YouTube URL** tab
 3. Paste a Synthesia video URL
 4. Click **Process Video**
@@ -116,72 +167,38 @@ gcloud run services update light-to-sheet \
 
 ## Daily Usage
 
-Every time you want the YouTube URL feature to work:
+Every time you want the YouTube URL feature to work, open **two terminals**:
 
-1. **Start the proxy** (Terminal 1):
-   ```bash
-   cd ~/Documents/Light_To_Sheet
-   PROXY_API_KEY=your-secret python3 download_proxy.py
-   ```
+**Terminal 1 — Start the proxy:**
+```bash
+cd ~/Documents/Light_To_Sheet
+PROXY_API_KEY=your-secret python3 download_proxy.py
+```
 
-2. **Start the tunnel** (Terminal 2):
-   ```bash
-   cloudflared tunnel --url http://localhost:8787
-   ```
+**Terminal 2 — Start the tunnel:**
+```bash
+cloudflared tunnel run piano-proxy
+```
 
-3. **Update Cloud Run** if the tunnel URL changed:
-   ```bash
-   gcloud run services update light-to-sheet \
-     --region us-central1 \
-     --update-env-vars "DOWNLOAD_PROXY_URL=https://new-tunnel-url.trycloudflare.com"
-   ```
+That's it. The URL `proxy.video2notes.app` is permanent — no need to update
+Cloud Run when you restart.
 
 > **Tip:** The Upload Video tab always works, even when your Mac is off.
 > The YouTube URL tab only works when both the proxy and tunnel are running.
 
 ---
 
-## Optional: Permanent Tunnel URL (recommended)
+## How the Piano Content Filter Works
 
-Quick tunnels give you a random URL that changes on restart. For a stable URL:
+The proxy includes a content filter that checks whether a YouTube video is
+piano-related before downloading it. It examines the video's title,
+description, tags, and channel name for piano-related keywords (piano,
+Synthesia, keyboard, etc.).
 
-### a) Create a Cloudflare account (free)
-Go to https://dash.cloudflare.com and sign up.
-
-### b) Authenticate cloudflared
-```bash
-cloudflared tunnel login
-```
-
-### c) Create a named tunnel
-```bash
-cloudflared tunnel create light-to-sheet-proxy
-```
-
-### d) Configure the tunnel
-Create `~/.cloudflared/config.yml`:
-```yaml
-tunnel: light-to-sheet-proxy
-credentials-file: /Users/YOUR_USERNAME/.cloudflared/<tunnel-id>.json
-
-ingress:
-  - hostname: proxy.yourdomain.com
-    service: http://localhost:8787
-  - service: http_status:404
-```
-
-### e) Add DNS record
-```bash
-cloudflared tunnel route dns light-to-sheet-proxy proxy.yourdomain.com
-```
-
-### f) Run the tunnel
-```bash
-cloudflared tunnel run light-to-sheet-proxy
-```
-
-Now your proxy is always at `https://proxy.yourdomain.com` — no need to
-update Cloud Run when you restart.
+If the video doesn't appear to be piano-related, the proxy returns a `403`
+error. The web app displays this as a friendly amber/gold notice ("Not a
+piano video") with a suggestion to try a Synthesia piano tutorial, rather
+than a generic red error.
 
 ---
 
@@ -193,4 +210,6 @@ update Cloud Run when you restart.
 | `401 Unauthorized` from Cloud Run logs | API keys don't match — check both PROXY_API_KEY values |
 | `Connection refused` in Cloud Run logs | Proxy or tunnel isn't running on your Mac |
 | YouTube URL works but is slow | Video downloads at your home internet speed, then uploads to Cloud Run |
-| Upload Video tab works, YouTube doesn't | Your Mac is offline or the tunnel URL changed |
+| Upload Video tab works, YouTube doesn't | Your Mac is offline or the tunnel isn't running |
+| `cloudflared tunnel run` fails | Check that `~/.cloudflared/config.yml` has the correct tunnel ID and credentials path |
+| DNS not resolving for proxy subdomain | Verify the CNAME was created: `dig proxy.video2notes.app CNAME +short` |
