@@ -2,7 +2,7 @@
 
 Detects piano key presses from Synthesia-style videos by measuring color distance from a calibrated background across 88 sampling strips representing the 88 piano keys (A0 to C8). Converts video into binary key states, CSV data, and ASCII sheet music notation.
 
-**Live app:** [light-to-sheet-2032166340.us-central1.run.app](https://light-to-sheet-2032166340.us-central1.run.app/)
+**Live app:** [video2notes.app](https://video2notes.app)
 
 ![Light to Sheet UI](App_UI.png)
 
