@@ -322,8 +322,9 @@ For full setup instructions, see **[DOWNLOAD_PROXY_SETUP.md](DOWNLOAD_PROXY_SETU
 **Quick summary:**
 
 1. Generate an API key: `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
-2. Start the proxy: `PROXY_API_KEY=your-key python3 download_proxy.py`
-3. Start the permanent tunnel: `cloudflared tunnel run piano-proxy`
+2. Install gunicorn if not already: `pip install gunicorn`
+3. Start the proxy: `PROXY_API_KEY=your-key python3 download_proxy.py`
+4. Start the permanent tunnel: `cloudflared tunnel run piano-proxy`
 4. Configure Cloud Run with the permanent proxy URL:
 
 ```bash
@@ -351,9 +352,17 @@ If everything works, congratulations — your app is live!
 
 ---
 
-## How to Redeploy After Code Changes
+## How to Stop, Redeploy, and Restart Everything
 
-Whenever you make changes to your code and want to update the live app:
+Use this when you've made code changes and want to update the live app. There are three components: the **Cloud Run app**, the **download proxy** (your Mac), and the **Cloudflare tunnel**.
+
+### 1. Stop the Download Proxy and Tunnel
+
+On your Mac, press `Ctrl+C` in both terminals:
+- The terminal running `python3 download_proxy.py` (kills Gunicorn workers)
+- The terminal running `cloudflared tunnel run piano-proxy`
+
+### 2. Deploy Updated Code to Cloud Run
 
 ```bash
 cd ~/Documents/Light_To_Sheet
@@ -367,9 +376,53 @@ gcloud run deploy light-to-sheet \
   --allow-unauthenticated
 ```
 
-Subsequent deploys are faster (3-5 minutes) because Docker layer caching kicks in.
+Wait for `Service [light-to-sheet] revision [...] has been deployed`. Takes 3-5 minutes (Docker layer caching).
 
 > **Note:** This preserves your existing environment variables (PROXY_API_KEY, DOWNLOAD_PROXY_URL). You only need to set those again if you're changing them.
+
+### 3. Restart the Download Proxy
+
+**Terminal 1:**
+```bash
+cd ~/Documents/Light_To_Sheet
+PROXY_API_KEY=your-secret python3 download_proxy.py
+```
+
+### 4. Restart the Cloudflare Tunnel
+
+**Terminal 2:**
+```bash
+cloudflared tunnel run piano-proxy
+```
+
+### 5. Verify
+
+```bash
+# Check Cloud Run is serving
+curl -s https://video2notes.app | head -5
+
+# Check proxy is reachable
+curl https://proxy.video2notes.app/health
+# → {"status":"ok"}
+```
+
+Open [https://video2notes.app](https://video2notes.app), sign in, and test with a YouTube URL.
+
+### Quick Reference (copy-paste)
+
+```bash
+# — On your Mac, stop everything first (Ctrl+C in both terminals) —
+
+# Deploy
+cd ~/Documents/Light_To_Sheet
+gcloud run deploy light-to-sheet --source . --region us-central1 --max-instances 1 --memory 2Gi --cpu 2 --timeout 900 --allow-unauthenticated
+
+# Restart proxy (Terminal 1)
+PROXY_API_KEY=your-secret python3 download_proxy.py
+
+# Restart tunnel (Terminal 2)
+cloudflared tunnel run piano-proxy
+```
 
 ---
 
