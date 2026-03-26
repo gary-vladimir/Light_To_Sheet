@@ -390,12 +390,20 @@
           'sheet_music.txt': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
         };
         for (const filename of data.files) {
-          const a = document.createElement('a');
-          a.href = '/api/download/' + data.job_id + '/' + filename;
-          a.className = 'download-btn';
-          a.download = filename;
-          a.innerHTML = (fileIcons[filename] || '') + ' ' + filename;
-          downloads.appendChild(a);
+          const btn = document.createElement('button');
+          btn.className = 'download-btn';
+          btn.innerHTML = (fileIcons[filename] || '') + ' ' + filename;
+          btn.addEventListener('click', async () => {
+            const resp = await fetch('/api/download/' + data.job_id + '/' + filename);
+            if (!resp.ok) return;
+            const blob = await resp.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(a.href);
+          });
+          downloads.appendChild(btn);
         }
 
         // Set up frame preview
@@ -424,11 +432,15 @@
     });
 
     // ---- Frame preview navigation ----
-    function showFrame(index) {
+    async function showFrame(index) {
       if (index < 0 || index >= previewFrames.length) return;
       currentFrameIndex = index;
       const filename = previewFrames[index];
-      previewImg.src = '/api/preview/' + currentJobId + '/' + filename;
+      const resp = await fetch('/api/preview/' + currentJobId + '/' + filename);
+      if (resp.ok) {
+        const blob = await resp.blob();
+        previewImg.src = URL.createObjectURL(blob);
+      }
 
       const match = filename.match(/frame_(\d+)\.jpg/);
       const frameNum = match ? parseInt(match[1], 10) : index;
@@ -597,10 +609,10 @@
           }
         });
 
-        // Patch fetch to attach the Firebase ID token to /api/process requests
+        // Patch fetch to attach the Firebase ID token to all /api/ requests
         const originalFetch = window.fetch;
         window.fetch = async function(url, options = {}) {
-          if (url === '/api/process' && currentUser) {
+          if (typeof url === 'string' && url.startsWith('/api/') && currentUser) {
             const idToken = await currentUser.getIdToken();
             options.headers = options.headers || {};
             options.headers['Authorization'] = 'Bearer ' + idToken;

@@ -93,6 +93,10 @@ def api_process():
     job_dir = os.path.join(JOBS_DIR, job_id)
     os.makedirs(job_dir, exist_ok=True)
 
+    # Store owner for access control on download/preview endpoints
+    with open(os.path.join(job_dir, ".owner"), "w") as f:
+        f.write(user["uid"])
+
     try:
         video_path = _get_input_video(request, job_dir)
     except NotPianoError:
@@ -162,18 +166,43 @@ def api_process():
     })
 
 
+def _verify_job_owner(job_id: str, req) -> str | tuple:
+    """Validate job_id and check ownership. Returns job_dir or an error response."""
+    try:
+        uuid.UUID(job_id)
+    except ValueError:
+        return jsonify({"error": "Invalid job ID"}), 400
+
+    job_dir = os.path.join(JOBS_DIR, job_id)
+    owner_file = os.path.join(job_dir, ".owner")
+    if not os.path.isdir(job_dir):
+        return jsonify({"error": "File not found"}), 404
+
+    # Check ownership (skip if no .owner file — legacy jobs)
+    if os.path.exists(owner_file):
+        try:
+            user = verify_firebase_token(req)
+        except ValueError:
+            return jsonify({"error": "Authentication required"}), 401
+        with open(owner_file) as f:
+            if f.read().strip() != user["uid"]:
+                return jsonify({"error": "File not found"}), 404
+
+    return job_dir
+
+
 @app.route("/api/download/<job_id>/<filename>")
 def api_download(job_id: str, filename: str):
     """Serve an output file for download."""
     if filename not in ALLOWED_OUTPUT_FILES:
         return jsonify({"error": "Invalid filename"}), 400
 
-    try:
-        uuid.UUID(job_id)
-    except ValueError:
-        return jsonify({"error": "Invalid job ID"}), 400
+    result = _verify_job_owner(job_id, request)
+    if isinstance(result, tuple):
+        return result
+    job_dir = result
 
-    file_path = os.path.join(JOBS_DIR, job_id, filename)
+    file_path = os.path.join(job_dir, filename)
     if not os.path.exists(file_path):
         return jsonify({"error": "File not found"}), 404
 
@@ -183,15 +212,15 @@ def api_download(job_id: str, filename: str):
 @app.route("/api/preview/<job_id>/<filename>")
 def api_preview(job_id: str, filename: str):
     """Serve a preview frame image."""
-    try:
-        uuid.UUID(job_id)
-    except ValueError:
-        return jsonify({"error": "Invalid job ID"}), 400
-
     if not re.fullmatch(r"frame_\d{6}\.jpg", filename):
         return jsonify({"error": "Invalid filename"}), 400
 
-    file_path = os.path.join(JOBS_DIR, job_id, "preview_frames", filename)
+    result = _verify_job_owner(job_id, request)
+    if isinstance(result, tuple):
+        return result
+    job_dir = result
+
+    file_path = os.path.join(job_dir, "preview_frames", filename)
     if not os.path.exists(file_path):
         return jsonify({"error": "File not found"}), 404
 
