@@ -46,14 +46,24 @@ _PIANO_KEYWORDS = [
 ]
 
 
-def _is_piano_video(url: str) -> bool:
-    """Check video metadata to determine if it's piano-related."""
+class _MetadataError(Exception):
+    """Failed to extract video metadata (network, age-gate, etc.)."""
+    pass
+
+
+def _check_piano_video(url: str) -> None:
+    """Check video metadata to determine if it's piano-related.
+
+    Raises:
+        _MetadataError: If metadata extraction fails (yt-dlp/network error).
+        ValueError: If the video is not piano-related.
+    """
     try:
         info = yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}).extract_info(
             url, download=False,
         )
-    except Exception:
-        return False
+    except Exception as e:
+        raise _MetadataError(f"Could not fetch video metadata: {e}") from e
 
     searchable = " ".join([
         info.get("title", ""),
@@ -64,7 +74,8 @@ def _is_piano_video(url: str) -> bool:
         info.get("uploader", ""),
     ]).lower()
 
-    return any(kw in searchable for kw in _PIANO_KEYWORDS)
+    if not any(kw in searchable for kw in _PIANO_KEYWORDS):
+        raise ValueError("Video does not appear to be piano-related")
 
 
 def _check_auth():
@@ -92,7 +103,12 @@ def download():
     if not url:
         return jsonify({"error": "Missing 'url' field"}), 400
 
-    if not _is_piano_video(url):
+    try:
+        _check_piano_video(url)
+    except _MetadataError as e:
+        print(f"[proxy] Metadata extraction failed: {e}")
+        return jsonify({"error": f"Could not check video metadata: {e}"}), 502
+    except ValueError:
         print(f"[proxy] Rejected (not piano-related): {url}")
         return jsonify({"error": "Video does not appear to be piano-related"}), 403
 
