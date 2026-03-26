@@ -99,9 +99,15 @@ def _download_via_proxy(url: str, output_path: str) -> None:
 
     if resp.status_code != 200:
         try:
-            detail = resp.json().get("error", resp.text)
+            detail = resp.json().get("error", "")
         except Exception:
-            detail = resp.text
+            detail = ""
+        # Fall back to a generic message if detail is empty or looks like HTML
+        if not detail or "<html" in detail.lower():
+            detail = f"Proxy returned HTTP {resp.status_code}"
+        # Truncate to avoid huge error strings
+        if len(detail) > 500:
+            detail = detail[:500] + "..."
         if resp.status_code == 403 and "piano" in detail.lower():
             raise NotPianoError(detail)
         raise DownloadFailedError(detail)

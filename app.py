@@ -104,10 +104,11 @@ def api_process():
         }), 400
     except DownloadFailedError as e:
         shutil.rmtree(job_dir, ignore_errors=True)
+        detail = str(e)[:500] if str(e) else ""
         return jsonify({
             "error_type": "download_failed",
             "error": "Couldn't download this video",
-            "detail": str(e),
+            "detail": detail,
         }), 400
     except ValueError as e:
         shutil.rmtree(job_dir, ignore_errors=True)
@@ -125,10 +126,11 @@ def api_process():
         )
     except Exception as e:
         shutil.rmtree(job_dir, ignore_errors=True)
+        detail = str(e)[:500] if str(e) else ""
         return jsonify({
             "error_type": "processing_failed",
             "error": "Something went wrong while processing the video",
-            "detail": str(e),
+            "detail": detail,
         }), 500
     finally:
         # Clean up the large preprocessed file (keep output files)
