@@ -14,6 +14,7 @@ See DOWNLOAD_PROXY_SETUP.md for full setup instructions.
 from __future__ import annotations
 
 import glob
+import hmac
 import os
 import shutil
 import tempfile
@@ -79,11 +80,11 @@ def _check_piano_video(url: str) -> None:
 
 
 def _check_auth():
-    """Verify the Bearer token matches our API key."""
+    """Verify the Bearer token matches our API key (constant-time)."""
     if not API_KEY:
         return  # No key configured — allow all (local dev only)
     token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
-    if token != API_KEY:
+    if not hmac.compare_digest(token, API_KEY):
         return jsonify({"error": "Unauthorized"}), 401
 
 
