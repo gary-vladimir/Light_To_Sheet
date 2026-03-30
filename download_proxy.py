@@ -165,12 +165,14 @@ def _cleanup(response):
 
 
 if __name__ == "__main__":
+    import sys
+
     port = int(os.environ.get("PROXY_PORT", 8787))
     print(f"[proxy] Starting download proxy on port {port}")
-    if API_KEY:
-        print(f"[proxy] API key is set (length={len(API_KEY)})")
-    else:
-        print("[proxy] WARNING: No PROXY_API_KEY set — server is open!")
+    if not API_KEY:
+        print("[proxy] ERROR: PROXY_API_KEY is required. Set it as an environment variable.")
+        sys.exit(1)
+    print(f"[proxy] API key is set (length={len(API_KEY)})")
 
     # Use Gunicorn in production, fall back to Flask dev server if unavailable
     try:
