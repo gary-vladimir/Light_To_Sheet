@@ -475,7 +475,11 @@
 
       const match = filename.match(/frame_(\d+)\.jpg/);
       const frameNum = match ? parseInt(match[1], 10) : index;
-      frameCounter.textContent = 'Frame ' + frameNum + '  (' + (index + 1) + ' / ' + previewFrames.length + ')';
+      const totalSec = frameNum / 24;
+      const min = Math.floor(totalSec / 60);
+      const sec = (totalSec % 60).toFixed(1);
+      const ts = min + ':' + (sec < 10 ? '0' : '') + sec;
+      frameCounter.textContent = ts + '  (' + (index + 1) + ' / ' + previewFrames.length + ')';
 
       prevBtn.disabled = (index === 0);
       nextBtn.disabled = (index === previewFrames.length - 1);
