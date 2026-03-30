@@ -202,7 +202,7 @@ def api_process():
     return jsonify({
         "job_id": job_id,
         "sheet_music": sheet_music,
-        "files": list(ALLOWED_OUTPUT_FILES),
+        "files": [f for f in ALLOWED_OUTPUT_FILES if os.path.exists(os.path.join(job_dir, f))],
         "preview_frames": preview_frames,
     })
 
