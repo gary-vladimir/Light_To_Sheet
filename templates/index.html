@@ -457,10 +457,16 @@
       if (index < 0 || index >= previewFrames.length) return;
       currentFrameIndex = index;
       const filename = previewFrames[index];
-      const resp = await fetch('/api/preview/' + currentJobId + '/' + filename);
-      if (resp.ok) {
-        const blob = await resp.blob();
-        previewImg.src = URL.createObjectURL(blob);
+      try {
+        const resp = await fetch('/api/preview/' + currentJobId + '/' + filename);
+        if (resp.ok) {
+          const blob = await resp.blob();
+          previewImg.src = URL.createObjectURL(blob);
+        } else {
+          previewImg.alt = 'Failed to load frame';
+        }
+      } catch {
+        previewImg.alt = 'Failed to load frame';
       }
 
       const match = filename.match(/frame_(\d+)\.jpg/);
