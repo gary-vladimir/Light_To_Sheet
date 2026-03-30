@@ -600,6 +600,24 @@ input[type="url"]:focus {
   gap: 1.5rem;
 }
 
+/* Upload progress bar */
+.upload-progress {
+  width: 80%;
+  max-width: 300px;
+  height: 6px;
+  background: var(--glass);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.upload-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-light));
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
 /* Waveform loader */
 .waveform-loader {
   display: flex;

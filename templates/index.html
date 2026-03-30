@@ -181,7 +181,10 @@
             <div class="waveform-bar"></div>
           </div>
           <p class="loading-text" id="loading-message">Processing video<span>.</span><span>.</span><span>.</span></p>
-          <p style="color:var(--text-muted); font-size:0.82rem;">This may take a few minutes for longer videos</p>
+          <div id="upload-progress" class="upload-progress hidden">
+            <div class="upload-progress-bar" id="upload-progress-bar"></div>
+          </div>
+          <p id="loading-hint" style="color:var(--text-muted); font-size:0.82rem;">This may take a few minutes for longer videos</p>
         </div>
       </div>
 
@@ -377,23 +380,65 @@
       msgIndex = 0;
       msgInterval = setInterval(cycleLoadingMessage, 3500);
 
-      try {
-        const resp = await fetch('/api/process', { method: 'POST', body: formData });
+      const uploadProgressEl = document.getElementById('upload-progress');
+      const uploadProgressBar = document.getElementById('upload-progress-bar');
+      const loadingHint = document.getElementById('loading-hint');
+      const isFileUpload = activeTab === 'upload';
 
-        if (resp.status === 413) {
+      if (isFileUpload) {
+        uploadProgressEl.classList.remove('hidden');
+        uploadProgressBar.style.width = '0%';
+        loadingHint.textContent = 'Uploading...';
+      }
+
+      try {
+        // Use XHR for upload progress, then parse response
+        const { status, responseText } = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', '/api/process');
+
+          // Attach auth header if signed in
+          if (window._firebaseAuth && window._firebaseAuth.auth.currentUser) {
+            window._firebaseAuth.auth.currentUser.getIdToken().then(token => {
+              xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+              xhr.send(formData);
+            });
+          } else {
+            xhr.send(formData);
+          }
+
+          xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable && isFileUpload) {
+              const pct = Math.round((e.loaded / e.total) * 100);
+              uploadProgressBar.style.width = pct + '%';
+              if (pct >= 100) {
+                uploadProgressEl.classList.add('hidden');
+                loadingHint.textContent = 'This may take a few minutes for longer videos';
+              }
+            }
+          });
+
+          xhr.addEventListener('load', () => resolve({ status: xhr.status, responseText: xhr.responseText }));
+          xhr.addEventListener('error', () => reject(new Error('Network error')));
+          xhr.addEventListener('abort', () => reject(new Error('Request aborted')));
+        });
+
+        uploadProgressEl.classList.add('hidden');
+
+        if (status === 413) {
           showError('File too large (max 500 MB). Please use a shorter or lower-quality video.');
           return;
         }
 
         let data;
         try {
-          data = await resp.json();
+          data = JSON.parse(responseText);
         } catch {
-          showError('Server returned an unexpected response (HTTP ' + resp.status + '). Please try again.');
+          showError('Server returned an unexpected response (HTTP ' + status + '). Please try again.');
           return;
         }
 
-        if (!resp.ok) {
+        if (status < 200 || status >= 300) {
           showError(data.error_type ? data : (data.error || 'Processing failed.'));
           return;
         }
