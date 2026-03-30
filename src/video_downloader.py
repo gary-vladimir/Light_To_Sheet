@@ -129,7 +129,7 @@ def _download_via_ytdlp(url: str, output_path: str) -> None:
     print(f"[yt-dlp] Downloading: {url}")
 
     ydl_opts = {
-        "format": "best[ext=mp4]/best",
+        "format": "best[ext=mp4]",
         "outtmpl": output_path,
         "quiet": True,
         "no_warnings": True,

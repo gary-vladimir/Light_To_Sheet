@@ -118,7 +118,7 @@ def download():
     output_path = os.path.join(tmp_dir, "video.mp4")
 
     ydl_opts = {
-        "format": "best[ext=mp4]/best",
+        "format": "best[ext=mp4]",
         "outtmpl": output_path,
         "quiet": True,
         "no_warnings": True,
