@@ -1130,6 +1130,35 @@ input[type="url"]:focus {
     max-width: 120px;
     font-size: 0.8rem;
   }
+
+  #sheet-music {
+    font-size: 0.6rem;
+    line-height: 1.35;
+    letter-spacing: -0.02em;
+  }
+
+  .sheet-music-wrapper {
+    padding: 0.75rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sheet-music-wrapper::after {
+    content: 'scroll \2192';
+    position: absolute;
+    bottom: 4px;
+    right: 8px;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  .trim-row {
+    flex-wrap: wrap;
+  }
+
+  .trim-input {
+    width: 70px;
+  }
 }
 
 /* --- Smooth Section Transitions --- */
