@@ -184,12 +184,17 @@ def api_process():
             if os.path.exists(vid_path):
                 os.remove(vid_path)
 
-    # Read sheet music for inline display
+    # Read sheet music for inline display (truncate if huge to avoid crashing browser)
+    _SHEET_MUSIC_MAX_DISPLAY = 500_000  # ~500 KB
     sheet_music_path = os.path.join(job_dir, "sheet_music.txt")
     sheet_music = ""
+    sheet_music_truncated = False
     if os.path.exists(sheet_music_path):
         with open(sheet_music_path) as f:
-            sheet_music = f.read()
+            sheet_music = f.read(_SHEET_MUSIC_MAX_DISPLAY + 1)
+        if len(sheet_music) > _SHEET_MUSIC_MAX_DISPLAY:
+            sheet_music = sheet_music[:_SHEET_MUSIC_MAX_DISPLAY]
+            sheet_music_truncated = True
 
     # List saved preview frames (sorted by filename → chronological order)
     preview_frames: list[str] = []
@@ -202,6 +207,7 @@ def api_process():
     return jsonify({
         "job_id": job_id,
         "sheet_music": sheet_music,
+        "sheet_music_truncated": sheet_music_truncated,
         "files": [f for f in ALLOWED_OUTPUT_FILES if os.path.exists(os.path.join(job_dir, f))],
         "preview_frames": preview_frames,
     })

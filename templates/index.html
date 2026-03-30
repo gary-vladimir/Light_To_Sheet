@@ -381,6 +381,9 @@
 
         // Display sheet music
         sheetMusic.textContent = data.sheet_music;
+        if (data.sheet_music_truncated) {
+          sheetMusic.textContent += '\n\n--- Output truncated for display. Download the full file below. ---';
+        }
 
         // Build download buttons with icons
         downloads.innerHTML = '';
