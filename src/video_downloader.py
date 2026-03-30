@@ -146,20 +146,36 @@ def _download_via_ytdlp(url: str, output_path: str) -> None:
 
 # --- Helpers ---
 
-def _extract_video_id(url: str) -> str | None:
-    """Extract YouTube video ID from various URL formats."""
-    parsed = urlparse(url)
-    host = parsed.hostname or ""
+_YOUTUBE_HOSTS = {
+    "youtube.com", "www.youtube.com", "m.youtube.com",
+    "youtu.be", "www.youtu.be",
+}
 
-    if "youtube.com" in host:
-        qs = parse_qs(parsed.query)
-        if "v" in qs:
-            return qs["v"][0]
-        # /embed/ID format
-        if parsed.path.startswith("/embed/"):
-            return parsed.path.split("/embed/")[1].split("/")[0]
+
+def _extract_video_id(url: str) -> str | None:
+    """Extract YouTube video ID from various URL formats.
+
+    Only accepts http/https URLs from known YouTube hostnames.
+    Returns None if the URL is not a recognized YouTube video URL.
+    """
+    parsed = urlparse(url)
+
+    if parsed.scheme not in ("http", "https"):
+        return None
+
+    host = parsed.hostname or ""
+    if host not in _YOUTUBE_HOSTS:
+        return None
 
     if host in ("youtu.be", "www.youtu.be"):
         return parsed.path.lstrip("/").split("/")[0].split("?")[0]
+
+    # youtube.com variants
+    qs = parse_qs(parsed.query)
+    if "v" in qs:
+        return qs["v"][0]
+    # /embed/ID format
+    if parsed.path.startswith("/embed/"):
+        return parsed.path.split("/embed/")[1].split("/")[0]
 
     return None
