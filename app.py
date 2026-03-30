@@ -89,6 +89,23 @@ def index() -> str:
     return render_template("index.html")
 
 
+_JOB_MAX_AGE_SECONDS = 3600  # 1 hour
+
+
+def _cleanup_old_jobs() -> None:
+    """Delete job directories older than 1 hour. Best-effort, never raises."""
+    if not os.path.isdir(JOBS_DIR):
+        return
+    cutoff = time.time() - _JOB_MAX_AGE_SECONDS
+    try:
+        for name in os.listdir(JOBS_DIR):
+            job_path = os.path.join(JOBS_DIR, name)
+            if os.path.isdir(job_path) and os.path.getmtime(job_path) < cutoff:
+                shutil.rmtree(job_path, ignore_errors=True)
+    except OSError:
+        pass
+
+
 @app.route("/api/process", methods=["POST"])
 def api_process():
     """Accept a YouTube URL or uploaded video, process it, return results. Requires authentication."""
@@ -108,6 +125,8 @@ def api_process():
             "error": f"Please wait {wait} seconds before submitting another video.",
         }), 429
     _user_last_request[uid] = now
+
+    _cleanup_old_jobs()
 
     log.info("Processing request from user %s", user.get("email", uid))
 
