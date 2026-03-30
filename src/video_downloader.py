@@ -66,7 +66,9 @@ def download_youtube_video(url: str, job_dir: str) -> str:
 # --- Strategy 1: Download Proxy (production) ---
 
 def _download_via_proxy(url: str, output_path: str) -> None:
-    """Call the home download proxy to fetch the video."""
+    """Call the home download proxy to fetch the video (with retry)."""
+    import time as _time
+
     endpoint = f"{_PROXY_URL}/download"
     headers = {"Content-Type": "application/json"}
     if _PROXY_KEY:
@@ -74,20 +76,30 @@ def _download_via_proxy(url: str, output_path: str) -> None:
 
     print(f"[proxy] Requesting download from proxy: {url}")
 
-    try:
-        resp = requests.post(
-            endpoint,
-            json={"url": url},
-            headers=headers,
-            stream=True,
-            timeout=(_PROXY_CONNECT_TIMEOUT, _PROXY_READ_TIMEOUT),
-        )
-    except requests.ConnectionError:
-        raise DownloadFailedError("Cannot reach download proxy — is it running?")
-    except requests.Timeout:
-        raise DownloadFailedError("Download proxy timed out (10 min limit)")
-    except requests.RequestException as e:
-        raise DownloadFailedError(f"Proxy request failed: {e}")
+    max_retries = 2
+    last_error: Exception | None = None
+    for attempt in range(1 + max_retries):
+        try:
+            resp = requests.post(
+                endpoint,
+                json={"url": url},
+                headers=headers,
+                stream=True,
+                timeout=(_PROXY_CONNECT_TIMEOUT, _PROXY_READ_TIMEOUT),
+            )
+            break  # success — got a response
+        except (requests.ConnectionError, requests.Timeout) as e:
+            last_error = e
+            if attempt < max_retries:
+                wait = 2 ** attempt  # 1s, 2s
+                print(f"[proxy] Attempt {attempt + 1} failed, retrying in {wait}s...")
+                _time.sleep(wait)
+                continue
+            if isinstance(e, requests.ConnectionError):
+                raise DownloadFailedError("Cannot reach download proxy — is it running?")
+            raise DownloadFailedError("Download proxy timed out (10 min limit)")
+        except requests.RequestException as e:
+            raise DownloadFailedError(f"Proxy request failed: {e}")
 
     if resp.status_code != 200:
         try:
