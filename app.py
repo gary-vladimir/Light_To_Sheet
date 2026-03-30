@@ -108,11 +108,11 @@ def api_process():
         }), 400
     except DownloadFailedError as e:
         shutil.rmtree(job_dir, ignore_errors=True)
-        detail = str(e)[:500] if str(e) else ""
+        log.warning("Download failed: %s", e)
         return jsonify({
             "error_type": "download_failed",
             "error": "Couldn't download this video",
-            "detail": detail,
+            "detail": "YouTube may block server-side downloads. Try the Upload Video tab instead.",
         }), 400
     except ValueError as e:
         shutil.rmtree(job_dir, ignore_errors=True)
@@ -130,11 +130,11 @@ def api_process():
         )
     except Exception as e:
         shutil.rmtree(job_dir, ignore_errors=True)
-        detail = str(e)[:500] if str(e) else ""
+        log.exception("Processing failed for job %s", job_id)
         return jsonify({
             "error_type": "processing_failed",
             "error": "Something went wrong while processing the video",
-            "detail": detail,
+            "detail": "Try a different video or a shorter clip. If this keeps happening, the video format may not be supported.",
         }), 500
     finally:
         # Clean up large video files (keep output files)
