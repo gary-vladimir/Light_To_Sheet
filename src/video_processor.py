@@ -73,6 +73,15 @@ def preprocess_video(input_path: str, output_path: str) -> str:
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
 
+    # Reject videos longer than 30 minutes to prevent memory/timeout issues
+    if fps > 0 and frame_count > 0:
+        duration_minutes = frame_count / fps / 60
+        if duration_minutes > 30:
+            raise RuntimeError(
+                f"Video is too long ({duration_minutes:.0f} minutes). "
+                f"Maximum supported duration is 30 minutes."
+            )
+
     print(f"Video preprocessed: {frame_count} frames at {fps:.0f}fps ({width}x{height})")
     return output_path
 
