@@ -73,6 +73,14 @@ def verify_firebase_token(req) -> dict:
         raise ValueError(f"Invalid authentication token: {e}") from e
 
 
+@app.after_request
+def _set_security_headers(response):
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
 @app.route("/")
 def index() -> str:
     return render_template("index.html")
