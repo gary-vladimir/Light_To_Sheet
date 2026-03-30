@@ -355,7 +355,13 @@
         formData.append('youtube_url', url);
       } else {
         if (!videoFileInput.files.length) { showError('Please select a video file.'); return; }
-        formData.append('video_file', videoFileInput.files[0]);
+        const file = videoFileInput.files[0];
+        const maxSize = 500 * 1024 * 1024; // 500 MB
+        if (file.size > maxSize) {
+          showError('File exceeds the 500 MB limit. Please use a shorter or lower-quality video.');
+          return;
+        }
+        formData.append('video_file', file);
       }
 
       // Show loading, hide others
@@ -370,7 +376,19 @@
 
       try {
         const resp = await fetch('/api/process', { method: 'POST', body: formData });
-        const data = await resp.json();
+
+        if (resp.status === 413) {
+          showError('File too large (max 500 MB). Please use a shorter or lower-quality video.');
+          return;
+        }
+
+        let data;
+        try {
+          data = await resp.json();
+        } catch {
+          showError('Server returned an unexpected response (HTTP ' + resp.status + '). Please try again.');
+          return;
+        }
 
         if (!resp.ok) {
           showError(data.error_type ? data : (data.error || 'Processing failed.'));
