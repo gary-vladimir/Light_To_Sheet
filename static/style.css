@@ -928,6 +928,13 @@ input[type="url"]:focus {
   text-align: center;
 }
 
+.frame-slider {
+  width: 100%;
+  margin: 0.5rem 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 .preview-image-wrapper {
   background: #000;
   border: 1px solid var(--glass-border);
