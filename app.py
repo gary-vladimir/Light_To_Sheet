@@ -160,9 +160,12 @@ def api_process():
         return jsonify({"error_type": "validation", "error": str(e)}), 400
 
     # Preprocess and process
+    trim_start = request.form.get("trim_start", "").strip() or None
+    trim_end = request.form.get("trim_end", "").strip() or None
     processed_path = os.path.join(job_dir, "processed.mp4")
     try:
-        preprocess_video(video_path, processed_path)
+        preprocess_video(video_path, processed_path,
+                         trim_start=trim_start, trim_end=trim_end)
         process_video(
             processed_path,
             output_dir=job_dir,

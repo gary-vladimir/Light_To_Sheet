@@ -472,6 +472,44 @@ h1 {
   margin-top: 1px;
 }
 
+/* --- Trim inputs --- */
+.trim-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--glass-border);
+}
+
+.trim-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.trim-input {
+  width: 80px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.82rem;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm, 6px);
+  color: var(--text-primary);
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.trim-input::placeholder {
+  color: var(--text-muted);
+  font-family: 'Inter', sans-serif;
+}
+
+.trim-sep {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
 /* --- Input Label --- */
 .input-label {
   display: flex;

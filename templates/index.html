@@ -159,6 +159,14 @@
             </p>
           </div>
 
+          <!-- Optional trim -->
+          <div class="trim-row">
+            <label class="trim-label">Trim (optional)</label>
+            <input type="text" id="trim-start" class="trim-input" placeholder="Start 0:00" autocomplete="off">
+            <span class="trim-sep">to</span>
+            <input type="text" id="trim-end" class="trim-input" placeholder="End" autocomplete="off">
+          </div>
+
           <button type="submit" id="submit-btn">
             <span id="submit-btn-text">Sign in to Process</span>
             <span class="btn-icon">
@@ -369,6 +377,12 @@
         }
         formData.append('video_file', file);
       }
+
+      // Optional trim times
+      const trimStart = document.getElementById('trim-start').value.trim();
+      const trimEnd = document.getElementById('trim-end').value.trim();
+      if (trimStart) formData.append('trim_start', trimStart);
+      if (trimEnd) formData.append('trim_end', trimEnd);
 
       // Show loading, hide others
       submitBtn.disabled = true;
