@@ -13,9 +13,11 @@ See DOWNLOAD_PROXY_SETUP.md for full setup instructions.
 
 from __future__ import annotations
 
+import glob
 import os
 import shutil
 import tempfile
+import time
 
 import yt_dlp
 from flask import Flask, jsonify, request, send_file
@@ -44,14 +46,24 @@ _PIANO_KEYWORDS = [
 ]
 
 
-def _is_piano_video(url: str) -> bool:
-    """Check video metadata to determine if it's piano-related."""
+class _MetadataError(Exception):
+    """Failed to extract video metadata (network, age-gate, etc.)."""
+    pass
+
+
+def _check_piano_video(url: str) -> None:
+    """Check video metadata to determine if it's piano-related.
+
+    Raises:
+        _MetadataError: If metadata extraction fails (yt-dlp/network error).
+        ValueError: If the video is not piano-related.
+    """
     try:
         info = yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}).extract_info(
             url, download=False,
         )
-    except Exception:
-        return False
+    except Exception as e:
+        raise _MetadataError(f"Could not fetch video metadata: {e}") from e
 
     searchable = " ".join([
         info.get("title", ""),
@@ -62,7 +74,8 @@ def _is_piano_video(url: str) -> bool:
         info.get("uploader", ""),
     ]).lower()
 
-    return any(kw in searchable for kw in _PIANO_KEYWORDS)
+    if not any(kw in searchable for kw in _PIANO_KEYWORDS):
+        raise ValueError("Video does not appear to be piano-related")
 
 
 def _check_auth():
@@ -90,7 +103,12 @@ def download():
     if not url:
         return jsonify({"error": "Missing 'url' field"}), 400
 
-    if not _is_piano_video(url):
+    try:
+        _check_piano_video(url)
+    except _MetadataError as e:
+        print(f"[proxy] Metadata extraction failed: {e}")
+        return jsonify({"error": f"Could not check video metadata: {e}"}), 502
+    except ValueError:
         print(f"[proxy] Rejected (not piano-related): {url}")
         return jsonify({"error": "Video does not appear to be piano-related"}), 403
 
@@ -131,9 +149,18 @@ def download():
 
 @app.after_request
 def _cleanup(response):
-    """Clean up temp files after the response is sent."""
-    # Flask/Werkzeug closes the file after streaming, so we schedule cleanup
-    # via a callback. For simplicity, temp dirs are cleaned on next request.
+    """Clean up old temp directories from previous requests.
+
+    The current request's temp dir may still be streaming, so we only
+    delete directories older than 5 minutes.
+    """
+    cutoff = time.time() - 300  # 5 minutes ago
+    for tmp_dir in glob.glob(os.path.join(tempfile.gettempdir(), "lts_proxy_*")):
+        try:
+            if os.path.getmtime(tmp_dir) < cutoff:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+        except OSError:
+            pass
     return response
 
 
@@ -144,4 +171,29 @@ if __name__ == "__main__":
         print(f"[proxy] API key is set (length={len(API_KEY)})")
     else:
         print("[proxy] WARNING: No PROXY_API_KEY set — server is open!")
-    app.run(host="0.0.0.0", port=port, debug=False)
+
+    # Use Gunicorn in production, fall back to Flask dev server if unavailable
+    try:
+        from gunicorn.app.base import BaseApplication
+
+        class _StandaloneApp(BaseApplication):
+            def __init__(self, flask_app, options):
+                self.flask_app = flask_app
+                self.options = options
+                super().__init__()
+
+            def load_config(self):
+                for key, value in self.options.items():
+                    self.cfg.set(key.lower(), value)
+
+            def load(self):
+                return self.flask_app
+
+        _StandaloneApp(app, {
+            "bind": f"0.0.0.0:{port}",
+            "workers": 2,
+            "timeout": 900,  # 15 min — long downloads
+        }).run()
+    except ImportError:
+        print("[proxy] WARNING: gunicorn not installed, using Flask dev server")
+        app.run(host="0.0.0.0", port=port, debug=False)

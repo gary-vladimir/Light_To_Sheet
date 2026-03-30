@@ -67,7 +67,7 @@ python main.py
 ```
 
 The CLI prompts for:
-1. **Input source** — YouTube URL (downloads and caches in `downloaded_videos/`) or local video file (interactive arrow-key menu via `inquirer`)
+1. **Input source** — YouTube URL (downloads to a temp directory) or local video file (interactive arrow-key menu via `inquirer`)
 2. **Preview frames** — save annotated visualization frames to `preview_frames/` (y/n, default: yes)
 
 The CLI runs in **real-time mode** (1/24 second delay per frame), so processing takes as long as the video's duration. Output files are written to the current directory.
@@ -97,15 +97,15 @@ Returns JSON:
 Each request gets an isolated job directory under the system temp folder (`/tmp/light_to_sheet_jobs/<uuid>/`). The preprocessed and uploaded video files are cleaned up after processing; only the three output files remain for download.
 
 ### `GET /api/download/<job_id>/<filename>`
-Serves an output file for download. Only `output.txt`, `piano.csv`, and `sheet_music.txt` are allowed (whitelist). The job ID is validated as a UUID to prevent path traversal.
+Serves an output file for download. Requires authentication — the requesting user must own the job. Only `output.txt`, `piano.csv`, and `sheet_music.txt` are allowed (whitelist). The job ID is validated as a UUID to prevent path traversal.
 
 ### `GET /api/preview/<job_id>/<filename>`
-Serves a preview frame image. Filename must match `frame_NNNNNN.jpg`. The job ID is validated as a UUID and the filename is checked against a regex pattern to prevent path traversal.
+Serves a preview frame image. Requires authentication — the requesting user must own the job. Filename must match `frame_NNNNNN.jpg`. The job ID is validated as a UUID and the filename is checked against a regex pattern to prevent path traversal.
 
 ## How It Works
 
 ### 1. Video Preprocessing (FFmpeg)
-- Downloads YouTube video (cached in `downloaded_videos/`) or accepts a local/uploaded file
+- Downloads YouTube video (to a temp directory, no caching) or accepts a local/uploaded file
 - Uses FFmpeg to resize to **1848x1080** (stretches to fit, no aspect ratio preservation)
 - Converts to **24fps** while maintaining original duration
 - Width of 1848px is intentional — 52 white keys × ~35.54px each
@@ -260,6 +260,6 @@ All tunables live in `src/config.py`:
 - **Key Geometry**: White keys (52) are sampled at narrow 20px center strips within equal-width zones (~35.5px each). Black keys (36) are sampled at narrow 12px strips centered on the boundary between adjacent white keys. The narrow strips minimize spillover contamination from neighboring key beams
 - **All-Key Spillover Correction**: For every detected key, its distance is compared against its strongest neighbor within ±2 positions (physically adjacent keys). If the key's distance is less than 80% of the neighbor's distance, it is removed as light spillover. This preserves chords (two genuinely pressed keys have similar distances, ratio ~1.0 > 0.80) while removing spillover (dim reflected light at 20–60% of the source's distance)
 - **Frame Rate Normalization**: All videos are converted to 24fps during preprocessing, so frame count maps directly to time (24 frames = 1 second)
-- **YouTube Downloads**: In production, YouTube downloads are routed through a Mac-based proxy (`download_proxy.py`) via Cloudflare Tunnel — YouTube blocks all cloud server IPs, so a residential IP is required. Locally, yt-dlp downloads directly (requires Deno as JS runtime). Videos are cached to avoid re-downloading
+- **YouTube Downloads**: In production, YouTube downloads are routed through a Mac-based proxy (`download_proxy.py`) via Cloudflare Tunnel — YouTube blocks all cloud server IPs, so a residential IP is required. The proxy runs on Gunicorn (2 workers, 15-minute timeout) and cleans up temp files automatically. Locally, yt-dlp downloads directly (requires Deno as JS runtime). Each download is fresh — no caching
 - **Web App Auth**: Firebase Authentication with Google Sign-In. The frontend obtains a Firebase ID token and sends it in the `Authorization` header. The backend verifies it via `firebase-admin`. Auth is disabled in local dev when credentials aren't configured
-- **Web App Jobs**: Each web request creates an isolated temp directory (`/tmp/light_to_sheet_jobs/<uuid>/`), processes there, and serves files for download. Preprocessed/uploaded videos are cleaned up after processing
+- **Web App Jobs**: Each web request creates an isolated temp directory (`/tmp/light_to_sheet_jobs/<uuid>/`), processes there, and serves files for download. Each job records its owner (Firebase UID) and only that user can access the job's output files and preview frames. Preprocessed/uploaded/downloaded videos are cleaned up after processing

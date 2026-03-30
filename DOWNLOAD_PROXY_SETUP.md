@@ -16,7 +16,7 @@ User → Cloud Run (video2notes.app) → Cloudflare Tunnel → Your Mac → YouT
 ## Prerequisites
 
 - macOS with Python 3.10+
-- `yt-dlp` and `flask` installed (`pip install yt-dlp flask`)
+- `yt-dlp`, `flask`, and `gunicorn` installed (`pip install yt-dlp flask gunicorn`)
 - `cloudflared` CLI (installed below)
 - Deno installed (`brew install deno`) — required by yt-dlp for YouTube
 - A domain on Cloudflare (we use `video2notes.app`)
@@ -48,11 +48,15 @@ cd ~/Documents/Light_To_Sheet
 PROXY_API_KEY=your-secret-from-step-1 python3 download_proxy.py
 ```
 
-You should see:
+The proxy now uses **Gunicorn** (2 workers, 15-minute timeout) for stability. You should see:
 ```
 [proxy] Starting download proxy on port 8787
 [proxy] API key is set (length=43)
+[INFO] Listening at: http://0.0.0.0:8787
+[INFO] Booting worker with pid: ...
 ```
+
+If `gunicorn` is not installed, it falls back to the Flask dev server with a warning.
 
 **Test it** (in another terminal):
 ```bash
@@ -186,6 +190,17 @@ Cloud Run when you restart.
 > **Tip:** The Upload Video tab always works, even when your Mac is off.
 > The YouTube URL tab only works when both the proxy and tunnel are running.
 
+## Stopping the Proxy
+
+**Stop the proxy** — press `Ctrl+C` in Terminal 1 (kills Gunicorn and its workers).
+
+**Stop the tunnel** — press `Ctrl+C` in Terminal 2.
+
+Old temp files in `/tmp/lts_proxy_*` are cleaned up automatically (deleted after 5 minutes), but you can also clean them manually:
+```bash
+rm -rf /tmp/lts_proxy_*
+```
+
 ---
 
 ## How the Piano Content Filter Works
@@ -195,10 +210,10 @@ piano-related before downloading it. It examines the video's title,
 description, tags, and channel name for piano-related keywords (piano,
 Synthesia, keyboard, etc.).
 
-If the video doesn't appear to be piano-related, the proxy returns a `403`
-error. The web app displays this as a friendly amber/gold notice ("Not a
-piano video") with a suggestion to try a Synthesia piano tutorial, rather
-than a generic red error.
+- **Not piano-related** → `403` error. The web app shows a friendly amber notice.
+- **Metadata extraction failed** (network error, age-gate, etc.) → `502` error with
+  the real reason. Previously this was silently treated as "not piano", which caused
+  legitimate piano videos to be incorrectly rejected.
 
 ---
 
@@ -209,7 +224,9 @@ than a generic red error.
 | `[proxy] Failed: Deno is required` | Install Deno: `brew install deno` |
 | `401 Unauthorized` from Cloud Run logs | API keys don't match — check both PROXY_API_KEY values |
 | `Connection refused` in Cloud Run logs | Proxy or tunnel isn't running on your Mac |
+| `502` error on valid piano video | Metadata extraction failed (not a filter rejection). Check proxy logs for the real error. Usually a yt-dlp or network issue |
 | YouTube URL works but is slow | Video downloads at your home internet speed, then uploads to Cloud Run |
 | Upload Video tab works, YouTube doesn't | Your Mac is offline or the tunnel isn't running |
 | `cloudflared tunnel run` fails | Check that `~/.cloudflared/config.yml` has the correct tunnel ID and credentials path |
 | DNS not resolving for proxy subdomain | Verify the CNAME was created: `dig proxy.video2notes.app CNAME +short` |
+| `gunicorn: command not found` | Install it: `pip install gunicorn`. The proxy will fall back to Flask dev server otherwise |
