@@ -16,6 +16,7 @@ import os
 import re
 import shutil
 import tempfile
+import time
 import uuid
 
 import firebase_admin
@@ -46,6 +47,8 @@ except Exception:
 
 JOBS_DIR = os.path.join(tempfile.gettempdir(), "light_to_sheet_jobs")
 ALLOWED_OUTPUT_FILES = {"output.txt", "piano.csv", "sheet_music.txt"}
+_RATE_LIMIT_SECONDS = 60
+_user_last_request: dict[str, float] = {}
 
 log = logging.getLogger(__name__)
 
@@ -95,7 +98,18 @@ def api_process():
     except ValueError as e:
         return jsonify({"error": str(e)}), 401
 
-    log.info("Processing request from user %s", user.get("email", user["uid"]))
+    uid = user["uid"]
+    now = time.time()
+    last = _user_last_request.get(uid, 0)
+    if now - last < _RATE_LIMIT_SECONDS:
+        wait = int(_RATE_LIMIT_SECONDS - (now - last)) + 1
+        return jsonify({
+            "error_type": "rate_limited",
+            "error": f"Please wait {wait} seconds before submitting another video.",
+        }), 429
+    _user_last_request[uid] = now
+
+    log.info("Processing request from user %s", user.get("email", uid))
 
     job_id = str(uuid.uuid4())
     job_dir = os.path.join(JOBS_DIR, job_id)
