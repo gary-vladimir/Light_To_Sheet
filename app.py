@@ -249,6 +249,35 @@ def api_preview(job_id: str, filename: str):
     return send_file(file_path, mimetype="image/jpeg")
 
 
+# Magic bytes for common video formats
+_VIDEO_SIGNATURES = [
+    (4, b"ftyp"),       # MP4 / M4V / MOV (offset 4)
+    (0, b"\x1a\x45\xdf\xa3"),  # WebM / MKV (EBML header)
+    (0, b"RIFF"),       # AVI
+    (0, b"\x00\x00\x01\xba"),  # MPEG-PS
+    (0, b"\x00\x00\x01\xb3"),  # MPEG-1/2
+    (0, b"\x46\x4c\x56"),      # FLV
+]
+
+
+def _validate_video_file(path: str) -> None:
+    """Check that an uploaded file looks like a video (magic byte check).
+
+    Raises ValueError if the file doesn't match any known video signature.
+    """
+    with open(path, "rb") as f:
+        header = f.read(12)
+    if len(header) < 8:
+        raise ValueError("Uploaded file is too small to be a video.")
+    for offset, signature in _VIDEO_SIGNATURES:
+        if header[offset:offset + len(signature)] == signature:
+            return
+    raise ValueError(
+        "Uploaded file doesn't appear to be a video. "
+        "Supported formats: MP4, WebM, MKV, AVI, MOV."
+    )
+
+
 def _get_input_video(req, job_dir: str) -> str:
     """Extract the video path from the request (YouTube URL or file upload).
 
@@ -271,6 +300,7 @@ def _get_input_video(req, job_dir: str) -> str:
     if video_file and video_file.filename:
         input_path = os.path.join(job_dir, "input.mp4")
         video_file.save(input_path)
+        _validate_video_file(input_path)
         return input_path
 
     raise ValueError("Please provide a YouTube URL or upload a video file.")
