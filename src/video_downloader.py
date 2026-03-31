@@ -66,7 +66,9 @@ def download_youtube_video(url: str, job_dir: str) -> str:
 # --- Strategy 1: Download Proxy (production) ---
 
 def _download_via_proxy(url: str, output_path: str) -> None:
-    """Call the home download proxy to fetch the video."""
+    """Call the home download proxy to fetch the video (with retry)."""
+    import time as _time
+
     endpoint = f"{_PROXY_URL}/download"
     headers = {"Content-Type": "application/json"}
     if _PROXY_KEY:
@@ -74,20 +76,30 @@ def _download_via_proxy(url: str, output_path: str) -> None:
 
     print(f"[proxy] Requesting download from proxy: {url}")
 
-    try:
-        resp = requests.post(
-            endpoint,
-            json={"url": url},
-            headers=headers,
-            stream=True,
-            timeout=(_PROXY_CONNECT_TIMEOUT, _PROXY_READ_TIMEOUT),
-        )
-    except requests.ConnectionError:
-        raise DownloadFailedError("Cannot reach download proxy — is it running?")
-    except requests.Timeout:
-        raise DownloadFailedError("Download proxy timed out (10 min limit)")
-    except requests.RequestException as e:
-        raise DownloadFailedError(f"Proxy request failed: {e}")
+    max_retries = 2
+    last_error: Exception | None = None
+    for attempt in range(1 + max_retries):
+        try:
+            resp = requests.post(
+                endpoint,
+                json={"url": url},
+                headers=headers,
+                stream=True,
+                timeout=(_PROXY_CONNECT_TIMEOUT, _PROXY_READ_TIMEOUT),
+            )
+            break  # success — got a response
+        except (requests.ConnectionError, requests.Timeout) as e:
+            last_error = e
+            if attempt < max_retries:
+                wait = 2 ** attempt  # 1s, 2s
+                print(f"[proxy] Attempt {attempt + 1} failed, retrying in {wait}s...")
+                _time.sleep(wait)
+                continue
+            if isinstance(e, requests.ConnectionError):
+                raise DownloadFailedError("Cannot reach download proxy — is it running?")
+            raise DownloadFailedError("Download proxy timed out (10 min limit)")
+        except requests.RequestException as e:
+            raise DownloadFailedError(f"Proxy request failed: {e}")
 
     if resp.status_code != 200:
         try:
@@ -129,7 +141,7 @@ def _download_via_ytdlp(url: str, output_path: str) -> None:
     print(f"[yt-dlp] Downloading: {url}")
 
     ydl_opts = {
-        "format": "best[ext=mp4]/best",
+        "format": "best[ext=mp4]",
         "outtmpl": output_path,
         "quiet": True,
         "no_warnings": True,
@@ -146,20 +158,36 @@ def _download_via_ytdlp(url: str, output_path: str) -> None:
 
 # --- Helpers ---
 
-def _extract_video_id(url: str) -> str | None:
-    """Extract YouTube video ID from various URL formats."""
-    parsed = urlparse(url)
-    host = parsed.hostname or ""
+_YOUTUBE_HOSTS = {
+    "youtube.com", "www.youtube.com", "m.youtube.com",
+    "youtu.be", "www.youtu.be",
+}
 
-    if "youtube.com" in host:
-        qs = parse_qs(parsed.query)
-        if "v" in qs:
-            return qs["v"][0]
-        # /embed/ID format
-        if parsed.path.startswith("/embed/"):
-            return parsed.path.split("/embed/")[1].split("/")[0]
+
+def _extract_video_id(url: str) -> str | None:
+    """Extract YouTube video ID from various URL formats.
+
+    Only accepts http/https URLs from known YouTube hostnames.
+    Returns None if the URL is not a recognized YouTube video URL.
+    """
+    parsed = urlparse(url)
+
+    if parsed.scheme not in ("http", "https"):
+        return None
+
+    host = parsed.hostname or ""
+    if host not in _YOUTUBE_HOSTS:
+        return None
 
     if host in ("youtu.be", "www.youtu.be"):
         return parsed.path.lstrip("/").split("/")[0].split("?")[0]
+
+    # youtube.com variants
+    qs = parse_qs(parsed.query)
+    if "v" in qs:
+        return qs["v"][0]
+    # /embed/ID format
+    if parsed.path.startswith("/embed/"):
+        return parsed.path.split("/embed/")[1].split("/")[0]
 
     return None

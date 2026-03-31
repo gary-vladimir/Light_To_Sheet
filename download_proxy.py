@@ -14,6 +14,7 @@ See DOWNLOAD_PROXY_SETUP.md for full setup instructions.
 from __future__ import annotations
 
 import glob
+import hmac
 import os
 import shutil
 import tempfile
@@ -79,11 +80,11 @@ def _check_piano_video(url: str) -> None:
 
 
 def _check_auth():
-    """Verify the Bearer token matches our API key."""
+    """Verify the Bearer token matches our API key (constant-time)."""
     if not API_KEY:
         return  # No key configured — allow all (local dev only)
     token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
-    if token != API_KEY:
+    if not hmac.compare_digest(token, API_KEY):
         return jsonify({"error": "Unauthorized"}), 401
 
 
@@ -117,7 +118,7 @@ def download():
     output_path = os.path.join(tmp_dir, "video.mp4")
 
     ydl_opts = {
-        "format": "best[ext=mp4]/best",
+        "format": "best[ext=mp4]",
         "outtmpl": output_path,
         "quiet": True,
         "no_warnings": True,
@@ -165,12 +166,14 @@ def _cleanup(response):
 
 
 if __name__ == "__main__":
+    import sys
+
     port = int(os.environ.get("PROXY_PORT", 8787))
     print(f"[proxy] Starting download proxy on port {port}")
-    if API_KEY:
-        print(f"[proxy] API key is set (length={len(API_KEY)})")
-    else:
-        print("[proxy] WARNING: No PROXY_API_KEY set — server is open!")
+    if not API_KEY:
+        print("[proxy] ERROR: PROXY_API_KEY is required. Set it as an environment variable.")
+        sys.exit(1)
+    print(f"[proxy] API key is set (length={len(API_KEY)})")
 
     # Use Gunicorn in production, fall back to Flask dev server if unavailable
     try:

@@ -16,6 +16,7 @@ import os
 import re
 import shutil
 import tempfile
+import time
 import uuid
 
 import firebase_admin
@@ -46,6 +47,8 @@ except Exception:
 
 JOBS_DIR = os.path.join(tempfile.gettempdir(), "light_to_sheet_jobs")
 ALLOWED_OUTPUT_FILES = {"output.txt", "piano.csv", "sheet_music.txt"}
+_RATE_LIMIT_SECONDS = 60
+_user_last_request: dict[str, float] = {}
 
 log = logging.getLogger(__name__)
 
@@ -73,9 +76,34 @@ def verify_firebase_token(req) -> dict:
         raise ValueError(f"Invalid authentication token: {e}") from e
 
 
+@app.after_request
+def _set_security_headers(response):
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
 @app.route("/")
 def index() -> str:
     return render_template("index.html")
+
+
+_JOB_MAX_AGE_SECONDS = 3600  # 1 hour
+
+
+def _cleanup_old_jobs() -> None:
+    """Delete job directories older than 1 hour. Best-effort, never raises."""
+    if not os.path.isdir(JOBS_DIR):
+        return
+    cutoff = time.time() - _JOB_MAX_AGE_SECONDS
+    try:
+        for name in os.listdir(JOBS_DIR):
+            job_path = os.path.join(JOBS_DIR, name)
+            if os.path.isdir(job_path) and os.path.getmtime(job_path) < cutoff:
+                shutil.rmtree(job_path, ignore_errors=True)
+    except OSError:
+        pass
 
 
 @app.route("/api/process", methods=["POST"])
@@ -87,7 +115,20 @@ def api_process():
     except ValueError as e:
         return jsonify({"error": str(e)}), 401
 
-    log.info("Processing request from user %s", user.get("email", user["uid"]))
+    uid = user["uid"]
+    now = time.time()
+    last = _user_last_request.get(uid, 0)
+    if now - last < _RATE_LIMIT_SECONDS:
+        wait = int(_RATE_LIMIT_SECONDS - (now - last)) + 1
+        return jsonify({
+            "error_type": "rate_limited",
+            "error": f"Please wait {wait} seconds before submitting another video.",
+        }), 429
+    _user_last_request[uid] = now
+
+    _cleanup_old_jobs()
+
+    log.info("Processing request from user %s", user.get("email", uid))
 
     job_id = str(uuid.uuid4())
     job_dir = os.path.join(JOBS_DIR, job_id)
@@ -108,20 +149,23 @@ def api_process():
         }), 400
     except DownloadFailedError as e:
         shutil.rmtree(job_dir, ignore_errors=True)
-        detail = str(e)[:500] if str(e) else ""
+        log.warning("Download failed: %s", e)
         return jsonify({
             "error_type": "download_failed",
             "error": "Couldn't download this video",
-            "detail": detail,
+            "detail": "YouTube may block server-side downloads. Try the Upload Video tab instead.",
         }), 400
     except ValueError as e:
         shutil.rmtree(job_dir, ignore_errors=True)
         return jsonify({"error_type": "validation", "error": str(e)}), 400
 
     # Preprocess and process
+    trim_start = request.form.get("trim_start", "").strip() or None
+    trim_end = request.form.get("trim_end", "").strip() or None
     processed_path = os.path.join(job_dir, "processed.mp4")
     try:
-        preprocess_video(video_path, processed_path)
+        preprocess_video(video_path, processed_path,
+                         trim_start=trim_start, trim_end=trim_end)
         process_video(
             processed_path,
             output_dir=job_dir,
@@ -130,11 +174,11 @@ def api_process():
         )
     except Exception as e:
         shutil.rmtree(job_dir, ignore_errors=True)
-        detail = str(e)[:500] if str(e) else ""
+        log.exception("Processing failed for job %s", job_id)
         return jsonify({
             "error_type": "processing_failed",
             "error": "Something went wrong while processing the video",
-            "detail": detail,
+            "detail": "Try a different video or a shorter clip. If this keeps happening, the video format may not be supported.",
         }), 500
     finally:
         # Clean up large video files (keep output files)
@@ -143,12 +187,17 @@ def api_process():
             if os.path.exists(vid_path):
                 os.remove(vid_path)
 
-    # Read sheet music for inline display
+    # Read sheet music for inline display (truncate if huge to avoid crashing browser)
+    _SHEET_MUSIC_MAX_DISPLAY = 500_000  # ~500 KB
     sheet_music_path = os.path.join(job_dir, "sheet_music.txt")
     sheet_music = ""
+    sheet_music_truncated = False
     if os.path.exists(sheet_music_path):
         with open(sheet_music_path) as f:
-            sheet_music = f.read()
+            sheet_music = f.read(_SHEET_MUSIC_MAX_DISPLAY + 1)
+        if len(sheet_music) > _SHEET_MUSIC_MAX_DISPLAY:
+            sheet_music = sheet_music[:_SHEET_MUSIC_MAX_DISPLAY]
+            sheet_music_truncated = True
 
     # List saved preview frames (sorted by filename → chronological order)
     preview_frames: list[str] = []
@@ -161,7 +210,8 @@ def api_process():
     return jsonify({
         "job_id": job_id,
         "sheet_music": sheet_music,
-        "files": list(ALLOWED_OUTPUT_FILES),
+        "sheet_music_truncated": sheet_music_truncated,
+        "files": [f for f in ALLOWED_OUTPUT_FILES if os.path.exists(os.path.join(job_dir, f))],
         "preview_frames": preview_frames,
     })
 
@@ -227,6 +277,35 @@ def api_preview(job_id: str, filename: str):
     return send_file(file_path, mimetype="image/jpeg")
 
 
+# Magic bytes for common video formats
+_VIDEO_SIGNATURES = [
+    (4, b"ftyp"),       # MP4 / M4V / MOV (offset 4)
+    (0, b"\x1a\x45\xdf\xa3"),  # WebM / MKV (EBML header)
+    (0, b"RIFF"),       # AVI
+    (0, b"\x00\x00\x01\xba"),  # MPEG-PS
+    (0, b"\x00\x00\x01\xb3"),  # MPEG-1/2
+    (0, b"\x46\x4c\x56"),      # FLV
+]
+
+
+def _validate_video_file(path: str) -> None:
+    """Check that an uploaded file looks like a video (magic byte check).
+
+    Raises ValueError if the file doesn't match any known video signature.
+    """
+    with open(path, "rb") as f:
+        header = f.read(12)
+    if len(header) < 8:
+        raise ValueError("Uploaded file is too small to be a video.")
+    for offset, signature in _VIDEO_SIGNATURES:
+        if header[offset:offset + len(signature)] == signature:
+            return
+    raise ValueError(
+        "Uploaded file doesn't appear to be a video. "
+        "Supported formats: MP4, WebM, MKV, AVI, MOV."
+    )
+
+
 def _get_input_video(req, job_dir: str) -> str:
     """Extract the video path from the request (YouTube URL or file upload).
 
@@ -249,6 +328,7 @@ def _get_input_video(req, job_dir: str) -> str:
     if video_file and video_file.filename:
         input_path = os.path.join(job_dir, "input.mp4")
         video_file.save(input_path)
+        _validate_video_file(input_path)
         return input_path
 
     raise ValueError("Please provide a YouTube URL or upload a video file.")

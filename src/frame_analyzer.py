@@ -49,25 +49,26 @@ def calibrate_background(video_path: str) -> NDArray[np.float32]:
         RuntimeError: If the video cannot be opened or has no readable frames.
     """
     cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise RuntimeError(f"Cannot open video for calibration: {video_path}")
+    try:
+        if not cap.isOpened():
+            raise RuntimeError(f"Cannot open video for calibration: {video_path}")
 
-    # Collect per-key BGR samples: list of (88, 3) arrays, one per frame.
-    frame_samples: list[NDArray[np.float32]] = []
+        # Collect per-key BGR samples: list of (88, 3) arrays, one per frame.
+        frame_samples: list[NDArray[np.float32]] = []
 
-    for _ in range(CALIBRATION_FRAMES):
-        ret, frame = cap.read()
-        if not ret:
-            break
+        for _ in range(CALIBRATION_FRAMES):
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-        key_colors = np.empty((len(KEY_GEOMETRY), 3), dtype=np.float32)
-        for idx, geo in enumerate(KEY_GEOMETRY):
-            region = frame[0:1, geo["x_start"]:geo["x_end"]]  # (1, W, 3) BGR
-            key_colors[idx] = np.mean(region.reshape(-1, 3), axis=0)
+            key_colors = np.empty((len(KEY_GEOMETRY), 3), dtype=np.float32)
+            for idx, geo in enumerate(KEY_GEOMETRY):
+                region = frame[0:1, geo["x_start"]:geo["x_end"]]  # (1, W, 3) BGR
+                key_colors[idx] = np.mean(region.reshape(-1, 3), axis=0)
 
-        frame_samples.append(key_colors)
-
-    cap.release()
+            frame_samples.append(key_colors)
+    finally:
+        cap.release()
 
     if not frame_samples:
         raise RuntimeError("No frames could be read during calibration")

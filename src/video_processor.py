@@ -26,7 +26,12 @@ from .output_writer import OutputWriter
 from .utils import format_timestamp
 
 
-def preprocess_video(input_path: str, output_path: str) -> str:
+def preprocess_video(
+    input_path: str,
+    output_path: str,
+    trim_start: str | None = None,
+    trim_end: str | None = None,
+) -> str:
     """Resize video to target dimensions and convert to target FPS using FFmpeg.
 
     Uses FFmpeg directly (rather than OpenCV) to avoid frame-seeking issues
@@ -35,6 +40,8 @@ def preprocess_video(input_path: str, output_path: str) -> str:
     Args:
         input_path: Path to input video file.
         output_path: Path to save preprocessed video.
+        trim_start: Optional start time (e.g., "0:30", "1:05").
+        trim_end: Optional end time (e.g., "2:00", "3:30").
 
     Returns:
         Path to preprocessed video.
@@ -47,7 +54,13 @@ def preprocess_video(input_path: str, output_path: str) -> str:
     ffmpeg_cmd = [
         "ffmpeg",
         "-y",
-        "-i", input_path,
+    ]
+    if trim_start:
+        ffmpeg_cmd += ["-ss", trim_start]
+    ffmpeg_cmd += ["-i", input_path]
+    if trim_end:
+        ffmpeg_cmd += ["-to", trim_end]
+    ffmpeg_cmd += [
         "-vf", f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:force_original_aspect_ratio=disable,fps={VIDEO_FPS}",
         "-c:v", "libx264",
         "-preset", "fast",
@@ -72,6 +85,15 @@ def preprocess_video(input_path: str, output_path: str) -> str:
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
+
+    # Reject videos longer than 30 minutes to prevent memory/timeout issues
+    if fps > 0 and frame_count > 0:
+        duration_minutes = frame_count / fps / 60
+        if duration_minutes > 30:
+            raise RuntimeError(
+                f"Video is too long ({duration_minutes:.0f} minutes). "
+                f"Maximum supported duration is 30 minutes."
+            )
 
     print(f"Video preprocessed: {frame_count} frames at {fps:.0f}fps ({width}x{height})")
     return output_path
