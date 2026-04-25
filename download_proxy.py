@@ -13,9 +13,17 @@ See DOWNLOAD_PROXY_SETUP.md for full setup instructions.
 
 from __future__ import annotations
 
+import os
+
+# macOS: disable Objective-C fork-safety check before gunicorn spawns workers.
+# Without this, yt-dlp / urllib / SSL touches Foundation in the master, then
+# workers crash on first use with `objc[...] ... Crashing instead` and gunicorn
+# misreports it as SIGKILL / OOM. Must be set before any import that may pull
+# in Security.framework or CoreFoundation (ssl, urllib3, requests, yt_dlp).
+os.environ.setdefault("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES")
+
 import glob
 import hmac
-import os
 import shutil
 import tempfile
 import time
@@ -175,28 +183,18 @@ if __name__ == "__main__":
         sys.exit(1)
     print(f"[proxy] API key is set (length={len(API_KEY)})")
 
-    # Use Gunicorn in production, fall back to Flask dev server if unavailable
+    # Use waitress (threaded, no fork). Gunicorn is unusable on macOS because
+    # its fork-based worker model crashes on Python 3.12+ due to Apple's
+    # Objective-C fork-safety checks (OBJC_DISABLE_INITIALIZE_FORK_SAFETY is
+    # ignored on macOS 15+). Waitress uses a single process + thread pool,
+    # which avoids the fork entirely and handles our workload (1-2 concurrent
+    # downloads) comfortably.
     try:
-        from gunicorn.app.base import BaseApplication
-
-        class _StandaloneApp(BaseApplication):
-            def __init__(self, flask_app, options):
-                self.flask_app = flask_app
-                self.options = options
-                super().__init__()
-
-            def load_config(self):
-                for key, value in self.options.items():
-                    self.cfg.set(key.lower(), value)
-
-            def load(self):
-                return self.flask_app
-
-        _StandaloneApp(app, {
-            "bind": f"0.0.0.0:{port}",
-            "workers": 2,
-            "timeout": 900,  # 15 min — long downloads
-        }).run()
+        from waitress import serve
+        print("[proxy] Using waitress (threaded, no fork) · 4 threads · 15min timeout")
+        serve(app, host="0.0.0.0", port=port,
+              threads=4, channel_timeout=900)
     except ImportError:
-        print("[proxy] WARNING: gunicorn not installed, using Flask dev server")
-        app.run(host="0.0.0.0", port=port, debug=False)
+        print("[proxy] WARNING: waitress not installed, using Flask dev server")
+        print("[proxy]          install with: pip install waitress")
+        app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
