@@ -5,6 +5,7 @@ env/
 .env
 *.pyc
 __pycache__/
+.python-version
 
 # Output files
 output.txt
