@@ -3,10 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Light to Sheet</title>
+  <title>video2notes — Synthesia → sheet music</title>
+  <link rel="icon" type="image/jpeg" href="/static/favicon.jpg">
+  <link rel="shortcut icon" type="image/jpeg" href="/static/favicon.jpg">
+  <link rel="apple-touch-icon" href="/static/favicon.jpg">
+  <meta name="theme-color" content="#07070b">
+  <meta name="description" content="Turn any Synthesia-style piano video into ASCII sheet music. Paste a YouTube link or upload a file — free, no watermark.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400;1,9..144,500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 
-  <!-- Firebase SDK (modular, from CDN) -->
+  <!-- Firebase Auth (modular SDK from CDN) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut }
@@ -25,700 +33,1086 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
-
-    // Bridge to the non-module script below
     window._firebaseAuth = { auth, provider, signInWithPopup, onAuthStateChanged, signOut };
+    window.dispatchEvent(new Event("firebase-ready"));
   </script>
 </head>
 <body>
-  <!-- ===== Top Auth Navbar ===== -->
-  <nav class="auth-navbar" id="auth-navbar">
-    <div class="auth-navbar-inner">
-      <!-- Sign-in button (shown when NOT signed in) -->
-      <button type="button" id="login-btn" class="login-btn">
-        <svg class="google-icon" width="18" height="18" viewBox="0 0 24 24">
-          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
-          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 0 0 1 12c0 1.77.42 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-        </svg>
-        Sign in with Google
-      </button>
+  <div class="app" id="app" data-scene="idle">
 
-      <!-- User profile (shown when signed in) -->
-      <div id="user-profile" class="user-profile hidden">
-        <img id="user-avatar" class="user-avatar" alt="Profile" src="">
-        <span id="user-name" class="user-name"></span>
-        <button type="button" id="sign-out-btn" class="sign-out-btn">Sign out</button>
+    <!-- ============ Top bar ============ -->
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div class="brand-name"><span class="v">video</span><span class="two">2</span><span class="v">notes</span></div>
+      </div>
+      <div class="topbar-right">
+        <span class="status-pill" id="status-pill"><span class="status-dot"></span>ready</span>
+        <button type="button" class="btn-google" id="login-btn">
+          <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5c-.3 1.5-1.1 2.8-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.7z"/><path fill="#34A853" d="M12 24c3.2 0 5.9-1.1 7.9-2.9l-3.9-3c-1.1.7-2.4 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9h-4v3.1C3.5 21.3 7.4 24 12 24z"/><path fill="#FBBC05" d="M5.4 14.4c-.2-.7-.3-1.4-.3-2.1s.1-1.4.3-2.1V7.1h-4C.5 8.7 0 10.3 0 12.3s.5 3.6 1.4 5.2l4-3.1z"/><path fill="#EA4335" d="M12 4.8c1.7 0 3.3.6 4.5 1.8l3.4-3.4C17.9 1.2 15.2 0 12 0 7.4 0 3.5 2.7 1.4 7.1l4 3.1C6.3 7.4 8.9 4.8 12 4.8z"/></svg>
+          Sign in
+        </button>
+        <span class="user-chip hidden" id="user-chip">
+          <img class="user-avatar" id="user-avatar" alt="" src="">
+          <span id="user-name"></span>
+          <button type="button" class="sign-out-btn" id="sign-out-btn" title="Sign out">↗</button>
+        </span>
       </div>
     </div>
-  </nav>
 
-  <!-- Animated background effects -->
-  <div class="bg-effects">
-    <div class="bg-orb bg-orb--1"></div>
-    <div class="bg-orb bg-orb--2"></div>
-    <div class="bg-orb bg-orb--3"></div>
-  </div>
-  <div class="bg-grid"></div>
-
-  <div class="container">
-    <header>
-      <!-- Animated Logo Icon -->
-      <div class="logo-icon">
-        <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
-          <defs>
-            <linearGradient id="logoGrad" x1="0" y1="0" x2="56" y2="56">
-              <stop offset="0%" stop-color="#a29bfe"/>
-              <stop offset="100%" stop-color="#fd79a8"/>
-            </linearGradient>
-          </defs>
-          <rect x="4" y="4" width="48" height="48" rx="14" fill="none" stroke="url(#logoGrad)" stroke-width="2" opacity="0.3"/>
-          <ellipse cx="22" cy="36" rx="5" ry="4" fill="url(#logoGrad)" opacity="0.9"/>
-          <rect x="26.5" y="16" width="2.5" height="21" rx="1.25" fill="url(#logoGrad)" opacity="0.9"/>
-          <ellipse cx="34" cy="33" rx="5" ry="4" fill="url(#logoGrad)" opacity="0.6"/>
-          <rect x="38.5" y="14" width="2.5" height="20" rx="1.25" fill="url(#logoGrad)" opacity="0.6"/>
-          <rect x="27" y="14" width="14" height="3" rx="1.5" fill="url(#logoGrad)" opacity="0.75"/>
-        </svg>
-      </div>
-
-      <h1>Light to Sheet</h1>
-      <p class="subtitle">Convert Synthesia piano videos to sheet music</p>
-
-      <!-- Animated mini piano visualization -->
-      <div class="piano-visual">
-        <svg id="piano-svg" width="320" height="40" viewBox="0 0 320 40">
-          <rect class="piano-key-white" x="1" y="0" width="21" height="38" rx="2"/>
-          <rect class="piano-key-white" x="24" y="0" width="21" height="38" rx="2"/>
-          <rect class="piano-key-white" x="47" y="0" width="21" height="38" rx="2"/>
-          <rect class="piano-key-white" x="70" y="0" width="21" height="38" rx="2"/>
-          <rect class="piano-key-white" x="93" y="0" width="21" height="38" rx="2"/>
-          <rect class="piano-key-white" x="116" y="0" width="21" height="38" rx="2"/>
-          <rect class="piano-key-white" x="139" y="0" width="21" height="38" rx="2"/>
-          <rect class="piano-key-white" x="162" y="0" width="21" height="38" rx="2"/>
-          <rect class="piano-key-white" x="185" y="0" width="21" height="38" rx="2"/>
-          <rect class="piano-key-white" x="208" y="0" width="21" height="38" rx="2"/>
-          <rect class="piano-key-white" x="231" y="0" width="21" height="38" rx="2"/>
-          <rect class="piano-key-white" x="254" y="0" width="21" height="38" rx="2"/>
-          <rect class="piano-key-white" x="277" y="0" width="21" height="38" rx="2"/>
-          <rect class="piano-key-white" x="300" y="0" width="19" height="38" rx="2"/>
-          <rect class="piano-key-black" x="16" y="0" width="14" height="24" rx="2"/>
-          <rect class="piano-key-black" x="39" y="0" width="14" height="24" rx="2"/>
-          <rect class="piano-key-black" x="85" y="0" width="14" height="24" rx="2"/>
-          <rect class="piano-key-black" x="108" y="0" width="14" height="24" rx="2"/>
-          <rect class="piano-key-black" x="131" y="0" width="14" height="24" rx="2"/>
-          <rect class="piano-key-black" x="177" y="0" width="14" height="24" rx="2"/>
-          <rect class="piano-key-black" x="200" y="0" width="14" height="24" rx="2"/>
-          <rect class="piano-key-black" x="246" y="0" width="14" height="24" rx="2"/>
-          <rect class="piano-key-black" x="269" y="0" width="14" height="24" rx="2"/>
-          <rect class="piano-key-black" x="292" y="0" width="14" height="24" rx="2"/>
-        </svg>
-      </div>
-    </header>
-
-    <main>
-      <!-- Input Card -->
-      <div class="card" id="input-card">
-        <!-- Tabs -->
-        <div class="tabs">
-          <button class="tab active" data-tab="upload" type="button">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            Upload Video
-          </button>
-          <button class="tab" data-tab="youtube" type="button">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19.13C5.12 19.56 12 19.56 12 19.56s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg>
-            YouTube URL
-          </button>
+    <!-- ============ Stage (falling beams + piano) — idle + processing ============ -->
+    <div class="stage" id="stage">
+      <div class="stage-inner">
+        <div class="beams" id="beams"></div>
+        <div class="horizon"></div>
+        <div class="keyboard">
+          <div class="kb" id="kb"></div>
         </div>
+      </div>
+    </div>
 
-        <form id="process-form">
-          <!-- File upload input (default tab) -->
-          <div class="tab-content active" id="tab-upload">
-            <label class="file-upload" id="file-label">
-              <input type="file" name="video_file" id="video-file" accept="video/*">
-              <div class="upload-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              </div>
-              <span class="upload-text">Choose a video file</span>
-              <span class="file-hint">MP4, AVI, MOV, MKV, WebM — up to 500 MB</span>
+    <!-- ============ Idle scene ============ -->
+    <div class="center" id="scene-idle">
+      <div class="composer">
+        <h1 class="headline">
+          Any Synthesia video <span class="arrow">→</span> <span class="glyph">sheet music</span><br/>
+          in minutes.
+        </h1>
+        <p class="subhead">
+          Paste a YouTube link or drop a file. We watch the beams, decode every frame,
+          and hand you the notes — free, no account except to verify you're human.
+        </p>
+
+        <div class="input-card">
+          <div class="tabs">
+            <button class="tab active" data-tab="youtube" type="button">
+              <span class="dot"></span> YouTube
+            </button>
+            <button class="tab" data-tab="upload" type="button">
+              <span class="dot off"></span> Upload
+            </button>
+          </div>
+
+          <div id="tab-youtube" class="tab-pane">
+            <div class="url-row">
+              <span class="url-prefix">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 12s-3.5 7-11 7S1 12 1 12s3.5-7 11-7 11 7 11 7z"/><circle cx="12" cy="12" r="3"/></svg>
+                youtube.com/
+              </span>
+              <input id="url-input" class="url-input" placeholder="watch?v=…  or paste full link" autocomplete="off" spellcheck="false">
+              <button type="button" class="process-btn" id="process-btn" disabled>
+                <span>Process</span>
+                <span class="key">⏎</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="tab-upload" class="tab-pane hidden">
+            <label class="dropzone" id="dropzone">
+              <input type="file" id="video-file" accept="video/*">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="color:var(--ink-dim)">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+              </svg>
+              <div class="dz-title" id="dz-title">Drop a video or click to browse</div>
+              <div class="dz-sub">MP4 · AVI · MOV · MKV · WEBM — up to 500 MB</div>
             </label>
           </div>
 
-          <!-- YouTube URL input -->
-          <div class="tab-content" id="tab-youtube">
-            <input
-              type="url"
-              name="youtube_url"
-              id="youtube-url"
-              placeholder="https://www.youtube.com/watch?v=..."
-              autocomplete="off"
-            >
-            <p class="youtube-note">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-              YouTube may block server-side downloads. If this fails, download the video yourself and use Upload Video instead.
-            </p>
-          </div>
-
-          <!-- Optional trim -->
           <div class="trim-row">
-            <label class="trim-label">Trim (optional)</label>
-            <input type="text" id="trim-start" class="trim-input" placeholder="Start 0:00" autocomplete="off">
-            <span class="trim-sep">to</span>
-            <input type="text" id="trim-end" class="trim-input" placeholder="End" autocomplete="off">
-          </div>
-
-          <button type="submit" id="submit-btn">
-            <span id="submit-btn-text">Sign in to Process</span>
-            <span class="btn-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-            </span>
-          </button>
-        </form>
-      </div>
-
-      <!-- Loading state -->
-      <div id="loading" class="hidden">
-        <div class="loading-content">
-          <div class="waveform-loader">
-            <div class="waveform-bar"></div>
-            <div class="waveform-bar"></div>
-            <div class="waveform-bar"></div>
-            <div class="waveform-bar"></div>
-            <div class="waveform-bar"></div>
-            <div class="waveform-bar"></div>
-            <div class="waveform-bar"></div>
-          </div>
-          <p class="loading-text" id="loading-message">Processing video<span>.</span><span>.</span><span>.</span></p>
-          <div id="upload-progress" class="upload-progress hidden">
-            <div class="upload-progress-bar" id="upload-progress-bar"></div>
-          </div>
-          <p id="loading-hint" style="color:var(--text-muted); font-size:0.82rem;">This may take a few minutes for longer videos</p>
-        </div>
-      </div>
-
-      <!-- Error / Notice message -->
-      <div id="error" class="hidden">
-        <button type="button" class="error-dismiss" id="error-dismiss" aria-label="Dismiss">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-        <span class="error-icon" id="error-icon"></span>
-        <div class="error-body">
-          <p class="error-title" id="error-title"></p>
-          <p class="error-detail" id="error-detail"></p>
-          <p class="error-suggestion hidden" id="error-suggestion"></p>
-        </div>
-      </div>
-
-      <!-- Results -->
-      <div id="results" class="hidden">
-        <!-- Frame Preview -->
-        <div id="frame-preview" class="hidden">
-          <div class="section-header">
-            <div class="section-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/></svg>
+            <button type="button" class="trim-toggle" id="trim-toggle">
+              <span class="chev">▸</span> Trim
+            </button>
+            <div class="trim-body hidden" id="trim-body">
+              <input class="time-input" id="trim-start" placeholder="0:00" autocomplete="off">
+              <span class="time-sep">→</span>
+              <input class="time-input" id="trim-end" placeholder="end" autocomplete="off">
+              <span class="trim-note">— optional, leave blank for full video</span>
             </div>
-            <h2>Frame Preview</h2>
           </div>
-          <div class="preview-controls">
-            <button type="button" id="prev-frame" class="preview-btn" disabled>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-              Prev
-            </button>
-            <span id="frame-counter">Frame 0 / 0</span>
-            <button type="button" id="next-frame" class="preview-btn">
-              Next
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-            </button>
-          </div>
-          <input type="range" id="frame-slider" class="frame-slider" min="0" max="0" value="0" step="1">
-          <div class="preview-image-wrapper">
-            <img id="preview-img" alt="Frame preview">
-          </div>
-        </div>
 
-        <!-- Sheet Music -->
-        <div class="section-header">
-          <div class="section-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          <div class="hints">
+            <span class="hint">⌘V to paste a link</span>
+            <span class="dot-sep">·</span>
+            <span class="hint">Works on Rousseau, Patrik Pietschmann, Animenz, Sheet Music Boss</span>
+            <span class="dot-sep">·</span>
+            <span class="hint">~90s per 3-min video</span>
           </div>
-          <h2>Sheet Music</h2>
         </div>
-        <div class="sheet-music-wrapper">
-          <pre id="sheet-music"></pre>
-        </div>
-
-        <!-- Downloads -->
-        <div class="section-header">
-          <div class="section-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          </div>
-          <h2>Download Files</h2>
-        </div>
-        <div class="downloads stagger" id="downloads"></div>
       </div>
-    </main>
-
-    <div class="footer">
-      Built with OpenCV, FFmpeg & Flask
     </div>
+
+    <!-- ============ Processing scene ============ -->
+    <div class="center hidden" id="scene-processing">
+      <div class="composer">
+        <h1 class="headline">
+          Decoding <span class="glyph">your video</span>
+        </h1>
+        <p class="subhead">
+          Reading the light — no audio analysis, no guesswork. Frame by frame.
+        </p>
+
+        <div class="input-card">
+          <div class="processing">
+            <div class="processing-head">
+              <span class="spin"><span class="spinner"></span> <span id="proc-phase">Connecting to server</span></span>
+              <span><span id="proc-pct">0</span>% · ETA <span id="proc-eta">—</span></span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" id="proc-fill" style="width:0%"></div></div>
+
+            <div class="upload-progress-wrap hidden" id="upload-progress-wrap">
+              <div class="lbl"><span>Uploading video</span><span id="upload-pct">0%</span></div>
+              <div class="upload-progress-bar"><div class="fill" id="upload-fill"></div></div>
+            </div>
+
+            <div class="proc-stats">
+              <div class="proc-stat"><div class="k">Phase</div><div class="v" id="stat-phase">Queued</div></div>
+              <div class="proc-stat"><div class="k">Elapsed</div><div class="v" id="stat-elapsed">0s</div></div>
+              <div class="proc-stat"><div class="k">Est. total</div><div class="v" id="stat-eta">—</div></div>
+              <div class="proc-stat"><div class="k">Beam colors</div><div class="v" style="display:flex;gap:4px;align-items:center">
+                <span style="width:10px;height:10px;border-radius:2px;background:var(--beam-1);box-shadow:0 0 6px var(--beam-1)"></span>
+                <span style="width:10px;height:10px;border-radius:2px;background:var(--beam-2);box-shadow:0 0 6px var(--beam-2)"></span>
+                <span style="color:var(--ink-mute);font-size:12px;margin-left:4px">any</span>
+              </div></div>
+            </div>
+
+            <div class="proc-log" id="proc-log">
+              <div class="line new"><span class="time">00.0</span>Queuing job</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ Error banner (top toast) ============ -->
+    <div class="error-mount hidden" id="error-mount">
+      <div class="error-banner" id="error-banner">
+        <div class="eicon" id="error-icon"></div>
+        <div class="ebody">
+          <p class="etitle" id="error-title"></p>
+          <p class="edetail" id="error-detail"></p>
+          <p class="esuggest hidden" id="error-suggestion"></p>
+        </div>
+        <button type="button" class="edismiss" id="error-dismiss" aria-label="Dismiss">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ============ Results scene ============ -->
+    <div class="results hidden" id="scene-results">
+      <div class="results-header">
+        <div class="song-card">
+          <div class="song-thumb"></div>
+          <div class="song-meta">
+            <div class="title" id="song-title">Your video</div>
+            <div class="sub" id="song-sub">
+              <span id="song-frames">— frames</span><span class="sep">·</span>
+              <span>24 fps</span><span class="sep">·</span>
+              <span style="color:var(--beam-3)" id="song-done">decoded ✓</span>
+            </div>
+          </div>
+        </div>
+        <div class="results-actions">
+          <button type="button" class="back-btn" id="new-video-btn">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            <span>New video</span>
+          </button>
+          <div id="download-chips"></div>
+        </div>
+      </div>
+
+      <div class="preview-pane">
+        <div class="pane-head">
+          <span class="title"><span class="dot"></span> frame.preview</span>
+          <span class="sub">what the decoder sees</span>
+        </div>
+        <div class="frame-viewport" id="frame-viewport">
+          <div class="frame-placeholder" id="frame-placeholder">No preview frames saved for this run.</div>
+          <img id="preview-img" alt="" class="hidden">
+        </div>
+        <div class="scrubber">
+          <div class="scrub-meta">
+            <span>
+              <span class="t" id="scrub-time">0:00.000000</span>
+              <span class="of"> / <span id="scrub-total">0:00.000000</span></span>
+              <span class="of" style="margin-left:14px">frame <span id="scrub-frame">0</span> / <span id="scrub-frames-total">0</span></span>
+            </span>
+            <span class="of">←/→ to step · space to play</span>
+          </div>
+          <div class="scrub-track" id="scrub-track">
+            <div class="scrub-played" id="scrub-played"></div>
+            <div class="scrub-ticks" id="scrub-ticks"></div>
+            <div class="scrub-cursor" id="scrub-cursor"></div>
+          </div>
+          <div class="scrub-controls">
+            <button type="button" class="scrub-btn" id="scrub-prev" title="prev frame">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h2v16H6zM20 4l-10 8 10 8V4z"/></svg>
+            </button>
+            <button type="button" class="scrub-btn" id="scrub-play" title="play/pause">
+              <svg id="scrub-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l14 8-14 8V4z"/></svg>
+            </button>
+            <button type="button" class="scrub-btn" id="scrub-next" title="next frame">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 4h2v16h-2zM4 4l10 8-10 8V4z"/></svg>
+            </button>
+            <span class="scrub-caption">Annotated preview · 1/24s per frame</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sheet-pane">
+        <div class="pane-head">
+          <span class="title"><span class="dot"></span> sheet_music.txt</span>
+          <span class="sub" id="sheet-meta">— rows</span>
+        </div>
+        <div class="ascii-viewport" id="ascii-viewport"></div>
+        <div class="sheet-foot">
+          <div class="sheet-legend">
+            <span class="lg"><span class="sw" style="background:var(--accent);box-shadow:0 0 6px var(--accent-glow)"></span> note</span>
+            <span class="lg" style="color:rgba(255,255,255,0.25)"><span class="sw" style="background:rgba(255,255,255,0.15)"></span> rest</span>
+          </div>
+          <span>10 rows · highest on top · 1 column per 1/24s</span>
+        </div>
+      </div>
+    </div>
+
   </div>
 
+  <script src="/static/song.js"></script>
   <script>
-    // ---- DOM refs ----
-    const form = document.getElementById('process-form');
-    const submitBtn = document.getElementById('submit-btn');
-    const submitBtnText = document.getElementById('submit-btn-text');
-    const inputCard = document.getElementById('input-card');
-    const loading = document.getElementById('loading');
-    const error = document.getElementById('error');
-    const errorIcon = document.getElementById('error-icon');
-    const errorTitle = document.getElementById('error-title');
-    const errorDetail = document.getElementById('error-detail');
-    const errorSuggestion = document.getElementById('error-suggestion');
-    const errorDismiss = document.getElementById('error-dismiss');
-    const results = document.getElementById('results');
-    const sheetMusic = document.getElementById('sheet-music');
-    const downloads = document.getElementById('downloads');
-    const youtubeInput = document.getElementById('youtube-url');
-    const videoFileInput = document.getElementById('video-file');
-    const fileLabel = document.getElementById('file-label');
+  // ============================================================
+  //  video2notes — vanilla JS frontend
+  // ============================================================
+  "use strict";
 
-    const framePreview = document.getElementById('frame-preview');
-    const prevBtn = document.getElementById('prev-frame');
-    const nextBtn = document.getElementById('next-frame');
-    const frameCounter = document.getElementById('frame-counter');
-    const previewImg = document.getElementById('preview-img');
-    const frameSlider = document.getElementById('frame-slider');
+  // ----- DOM refs -----
+  const app = document.getElementById("app");
+  const sceneIdle = document.getElementById("scene-idle");
+  const sceneProcessing = document.getElementById("scene-processing");
+  const sceneResults = document.getElementById("scene-results");
+  const stage = document.getElementById("stage");
+  const errorMount = document.getElementById("error-mount");
+  const errorBanner = document.getElementById("error-banner");
+  const errorIcon = document.getElementById("error-icon");
+  const errorTitle = document.getElementById("error-title");
+  const errorDetail = document.getElementById("error-detail");
+  const errorSuggestion = document.getElementById("error-suggestion");
+  const errorDismiss = document.getElementById("error-dismiss");
 
-    let previewFrames = [];
-    let currentFrameIndex = 0;
-    let currentJobId = null;
-    let activeTab = 'upload';
+  const loginBtn = document.getElementById("login-btn");
+  const userChip = document.getElementById("user-chip");
+  const userAvatar = document.getElementById("user-avatar");
+  const userName = document.getElementById("user-name");
+  const signOutBtn = document.getElementById("sign-out-btn");
 
-    // ---- Tab switching ----
-    document.querySelectorAll('.tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        tab.classList.add('active');
-        activeTab = tab.dataset.tab;
-        document.getElementById('tab-' + activeTab).classList.add('active');
+  const urlInput = document.getElementById("url-input");
+  const processBtn = document.getElementById("process-btn");
+  const videoFileInput = document.getElementById("video-file");
+  const dropzone = document.getElementById("dropzone");
+  const dzTitle = document.getElementById("dz-title");
+  const trimToggle = document.getElementById("trim-toggle");
+  const trimBody = document.getElementById("trim-body");
+  const trimStart = document.getElementById("trim-start");
+  const trimEnd = document.getElementById("trim-end");
+
+  const procPhase = document.getElementById("proc-phase");
+  const procPct = document.getElementById("proc-pct");
+  const procEta = document.getElementById("proc-eta");
+  const procFill = document.getElementById("proc-fill");
+  const procLog = document.getElementById("proc-log");
+  const statPhase = document.getElementById("stat-phase");
+  const statElapsed = document.getElementById("stat-elapsed");
+  const statEta = document.getElementById("stat-eta");
+  const uploadWrap = document.getElementById("upload-progress-wrap");
+  const uploadFill = document.getElementById("upload-fill");
+  const uploadPct = document.getElementById("upload-pct");
+
+  const previewImg = document.getElementById("preview-img");
+  const framePlaceholder = document.getElementById("frame-placeholder");
+  const scrubTrack = document.getElementById("scrub-track");
+  const scrubTicks = document.getElementById("scrub-ticks");
+  const scrubCursor = document.getElementById("scrub-cursor");
+  const scrubPlayed = document.getElementById("scrub-played");
+  const scrubTime = document.getElementById("scrub-time");
+  const scrubTotal = document.getElementById("scrub-total");
+  const scrubFrame = document.getElementById("scrub-frame");
+  const scrubFramesTotal = document.getElementById("scrub-frames-total");
+  const scrubPrev = document.getElementById("scrub-prev");
+  const scrubNext = document.getElementById("scrub-next");
+  const scrubPlay = document.getElementById("scrub-play");
+  const scrubPlayIcon = document.getElementById("scrub-play-icon");
+
+  const downloadChips = document.getElementById("download-chips");
+  const asciiViewport = document.getElementById("ascii-viewport");
+  const sheetMeta = document.getElementById("sheet-meta");
+  const songFrames = document.getElementById("song-frames");
+  const newVideoBtn = document.getElementById("new-video-btn");
+
+  // ----- State -----
+  let currentTab = "youtube";
+  let activeFile = null;
+  let currentJobId = null;
+  let previewFrames = [];   // filenames
+  let currentFrameIdx = 0;
+  let currentFiles = [];
+  let playingPreview = false;
+  let previewRaf = null;
+  let currentUser = null;
+  let pendingSubmit = false;
+
+  // ============================================================
+  //  Stage animation — falling beams + keyboard
+  // ============================================================
+
+  // Visible keyboard range: C2..C7 (MIDI 36..96) = 35 white keys
+  const KB_MIN_MIDI = 36;
+  const KB_MAX_MIDI = 96;
+  const WHITE_KEYS = [];
+  for (let m = KB_MIN_MIDI; m <= KB_MAX_MIDI; m++) {
+    if (!window.midiIsBlack(m)) WHITE_KEYS.push(m);
+  }
+  const TOTAL_WHITE = WHITE_KEYS.length;
+
+  function midiToXPct(midi) {
+    if (!window.midiIsBlack(midi)) {
+      const idx = WHITE_KEYS.indexOf(midi);
+      return { left: (idx / TOTAL_WHITE) * 100, width: (1 / TOTAL_WHITE) * 100, black: false };
+    }
+    const lowerWhite = midi - 1;
+    const idx = WHITE_KEYS.indexOf(lowerWhite);
+    const whiteW = 100 / TOTAL_WHITE;
+    return { left: idx * whiteW + whiteW * 0.68, width: whiteW * 0.62, black: true };
+  }
+
+  const beamColor = (hand) => hand === "R" ? "var(--beam-1)" : "var(--beam-2)";
+  const beamGlow  = (hand) => hand === "R" ? "rgba(255,138,61,0.55)" : "rgba(61,167,255,0.55)";
+
+  // Build static keyboard DOM
+  const kbEl = document.getElementById("kb");
+  const whiteKeyEls = new Map();  // midi -> el
+  const blackKeyEls = new Map();
+  (function buildKeyboard() {
+    WHITE_KEYS.forEach(m => {
+      const name = window.midiToName(m);
+      const isC = name.startsWith("C") && !name.includes("#");
+      const el = document.createElement("div");
+      el.className = "white-key" + (isC ? " c" : "");
+      if (isC) {
+        const lbl = document.createElement("span");
+        lbl.className = "kb-label";
+        lbl.textContent = name;
+        el.appendChild(lbl);
+      }
+      kbEl.appendChild(el);
+      whiteKeyEls.set(m, el);
+    });
+    for (let m = KB_MIN_MIDI; m <= KB_MAX_MIDI; m++) {
+      if (!window.midiIsBlack(m)) continue;
+      const pos = midiToXPct(m);
+      const el = document.createElement("div");
+      el.className = "black-key";
+      el.style.left = pos.left + "%";
+      el.style.width = pos.width + "%";
+      kbEl.appendChild(el);
+      blackKeyEls.set(m, el);
+    }
+  })();
+
+  const beamsEl = document.getElementById("beams");
+  const WINDOW_SEC = 3.0;
+  let stageRaf = null;
+  let stageTime = 0;
+  let lastRafTs = 0;
+  const beamPool = new Map();  // noteKey -> el
+
+  function stageTick(now) {
+    if (!lastRafTs) lastRafTs = now;
+    const dt = (now - lastRafTs) / 1000;
+    lastRafTs = now;
+    stageTime = (stageTime + dt) % window.SONG.durationSec;
+
+    const t = stageTime;
+    const visibleKeys = new Set();
+    const usedKeys = new Set();
+
+    for (const n of window.SONG.notes) {
+      if (n.start + n.dur < t - 0.2 || n.start > t + WINDOW_SEC) continue;
+      const key = `${n.start}-${n.midi}`;
+      usedKeys.add(key);
+      const pos = midiToXPct(n.midi);
+      const timeUntil = n.start - t;
+      const bottomPct = (timeUntil / WINDOW_SEC) * 100;
+      const heightPct = (n.dur / WINDOW_SEC) * 100;
+
+      let el = beamPool.get(key);
+      if (!el) {
+        el = document.createElement("div");
+        el.className = "beam";
+        if (heightPct > 6) {
+          const lbl = document.createElement("span");
+          lbl.className = "beam-label";
+          lbl.textContent = window.midiToName(n.midi);
+          el.appendChild(lbl);
+        }
+        beamsEl.appendChild(el);
+        beamPool.set(key, el);
+      }
+      el.style.left = pos.left + "%";
+      el.style.width = (pos.width * 0.9) + "%";
+      el.style.marginLeft = (pos.width * 0.05) + "%";
+      el.style.bottom = bottomPct + "%";
+      el.style.height = heightPct + "%";
+      el.style.setProperty("--beam-color", beamColor(n.hand));
+      el.style.setProperty("--beam-glow", beamGlow(n.hand));
+
+      // is the note currently hitting (lit)?
+      if (n.start <= t && n.start + n.dur > t) visibleKeys.add({ midi: n.midi, hand: n.hand });
+    }
+
+    // Remove pooled beams not in this frame
+    for (const [key, el] of beamPool) {
+      if (!usedKeys.has(key)) {
+        el.remove();
+        beamPool.delete(key);
+      }
+    }
+
+    // Light up currently pressed keys
+    const litMidi = new Map();
+    for (const v of visibleKeys) litMidi.set(v.midi, v.hand);
+    for (const [m, el] of whiteKeyEls) {
+      const hand = litMidi.get(m);
+      if (hand) {
+        el.classList.add("lit");
+        el.style.setProperty("--key-color", beamColor(hand));
+      } else {
+        el.classList.remove("lit");
+        el.style.removeProperty("--key-color");
+      }
+    }
+    for (const [m, el] of blackKeyEls) {
+      const hand = litMidi.get(m);
+      if (hand) {
+        el.classList.add("lit");
+        el.style.setProperty("--key-color", beamColor(hand));
+      } else {
+        el.classList.remove("lit");
+        el.style.removeProperty("--key-color");
+      }
+    }
+
+    stageRaf = requestAnimationFrame(stageTick);
+  }
+  function startStage() {
+    if (stageRaf) return;
+    lastRafTs = 0;
+    stageRaf = requestAnimationFrame(stageTick);
+  }
+  function stopStage() {
+    if (stageRaf) cancelAnimationFrame(stageRaf);
+    stageRaf = null;
+    // wipe beams
+    for (const [, el] of beamPool) el.remove();
+    beamPool.clear();
+  }
+
+  // ============================================================
+  //  Scene switching
+  // ============================================================
+  function setScene(scene) {
+    app.dataset.scene = scene;
+    sceneIdle.classList.toggle("hidden", scene !== "idle");
+    sceneProcessing.classList.toggle("hidden", scene !== "processing");
+    sceneResults.classList.toggle("hidden", scene !== "results");
+    stage.classList.toggle("hidden", scene === "results");
+    if (scene === "results") stopStage(); else startStage();
+    if (scene !== "idle") hideError();
+  }
+
+  // ============================================================
+  //  Tabs + inputs
+  // ============================================================
+  document.querySelectorAll(".tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      currentTab = tab.dataset.tab;
+      document.getElementById("tab-youtube").classList.toggle("hidden", currentTab !== "youtube");
+      document.getElementById("tab-upload").classList.toggle("hidden", currentTab !== "upload");
+      updateProcessEnabled();
+    });
+  });
+
+  function updateProcessEnabled() {
+    const hasInput = currentTab === "youtube"
+      ? urlInput.value.trim().length > 0
+      : activeFile !== null;
+    processBtn.disabled = !hasInput;
+  }
+
+  urlInput.addEventListener("input", updateProcessEnabled);
+  urlInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !processBtn.disabled) {
+      e.preventDefault();
+      onProcessClicked();
+    }
+  });
+
+  videoFileInput.addEventListener("change", () => {
+    if (videoFileInput.files && videoFileInput.files[0]) {
+      activeFile = videoFileInput.files[0];
+      dzTitle.textContent = activeFile.name;
+      dropzone.classList.add("drag");
+    } else {
+      activeFile = null;
+      dzTitle.textContent = "Drop a video or click to browse";
+      dropzone.classList.remove("drag");
+    }
+    updateProcessEnabled();
+  });
+
+  // drag-and-drop
+  ["dragenter", "dragover"].forEach(ev => {
+    dropzone.addEventListener(ev, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropzone.classList.add("drag");
+    });
+  });
+  ["dragleave", "drop"].forEach(ev => {
+    dropzone.addEventListener(ev, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (ev === "dragleave") dropzone.classList.remove("drag");
+    });
+  });
+  dropzone.addEventListener("drop", (e) => {
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) {
+      activeFile = file;
+      dzTitle.textContent = file.name;
+      dropzone.classList.add("drag");
+      updateProcessEnabled();
+      // Sync into the file input so submit path is uniform
+      try {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        videoFileInput.files = dt.files;
+      } catch { /* older browsers */ }
+    }
+  });
+
+  trimToggle.addEventListener("click", () => {
+    const open = !trimBody.classList.contains("hidden");
+    trimBody.classList.toggle("hidden");
+    trimToggle.classList.toggle("open", !open);
+  });
+
+  processBtn.addEventListener("click", () => onProcessClicked());
+  // Also allow clicking the dropzone to submit only if the user hit Enter -- but we don't auto-process on file selection.
+
+  // ============================================================
+  //  Firebase auth wiring
+  // ============================================================
+  window.addEventListener("firebase-ready", () => {
+    const { auth, provider, signInWithPopup, onAuthStateChanged, signOut } = window._firebaseAuth;
+
+    onAuthStateChanged(auth, (user) => {
+      currentUser = user;
+      if (user) {
+        loginBtn.classList.add("hidden");
+        userChip.classList.remove("hidden");
+        userAvatar.src = user.photoURL || "";
+        if (!user.photoURL) {
+          userAvatar.style.background = "linear-gradient(135deg,var(--beam-1),var(--beam-4))";
+          userAvatar.alt = (user.displayName || user.email || "?").charAt(0).toUpperCase();
+        }
+        userName.textContent = user.displayName || user.email || "";
+        if (pendingSubmit) {
+          pendingSubmit = false;
+          doSubmit();
+        }
+      } else {
+        loginBtn.classList.remove("hidden");
+        userChip.classList.add("hidden");
+      }
+    });
+
+    loginBtn.addEventListener("click", () => {
+      signInWithPopup(auth, provider).catch(err => {
+        if (err.code !== "auth/popup-closed-by-user" && err.code !== "auth/cancelled-popup-request") {
+          showError({ error_type: "signin", error: "Sign-in failed: " + err.message });
+        }
       });
     });
+    signOutBtn.addEventListener("click", () => signOut(auth));
+  });
 
-    // ---- File input label update ----
-    videoFileInput.addEventListener('change', () => {
-      const uploadText = fileLabel.querySelector('.upload-text');
-      if (videoFileInput.files.length > 0) {
-        uploadText.textContent = videoFileInput.files[0].name;
-        fileLabel.classList.add('has-file');
-      } else {
-        uploadText.textContent = 'Choose a video file';
-        fileLabel.classList.remove('has-file');
+  function onProcessClicked() {
+    // Validate
+    if (currentTab === "youtube") {
+      if (!urlInput.value.trim()) { showError("Please enter a YouTube URL."); return; }
+    } else {
+      if (!activeFile) { showError("Please select a video file."); return; }
+      if (activeFile.size > 500 * 1024 * 1024) {
+        showError("File exceeds the 500 MB limit. Please use a shorter or lower-quality video.");
+        return;
       }
-    });
+    }
+    // Require sign-in
+    if (window._firebaseAuth && !currentUser) {
+      pendingSubmit = true;
+      const { auth, provider, signInWithPopup } = window._firebaseAuth;
+      signInWithPopup(auth, provider).catch(err => {
+        pendingSubmit = false;
+        if (err.code !== "auth/popup-closed-by-user" && err.code !== "auth/cancelled-popup-request") {
+          showError({ error_type: "signin", error: "Sign-in failed: " + err.message });
+        }
+      });
+      return;
+    }
+    doSubmit();
+  }
 
-    // ---- Animated piano keys (header decoration) ----
-    const pianoKeys = document.querySelectorAll('#piano-svg rect');
-    let pianoInterval;
+  // ============================================================
+  //  Submit & processing simulator
+  // ============================================================
+  const LOG_LINES = [
+    "Fetching video",
+    "Preprocessing with FFmpeg (1848×1080 @ 24fps)",
+    "Calibrating per-key background from first 48 frames",
+    "Detecting beam color distances",
+    "Applying adaptive threshold",
+    "Running spillover correction",
+    "Writing output.txt · piano.csv · sheet_music.txt",
+  ];
+  const PHASES = [
+    { name: "Uploading", until: 0.20 },
+    { name: "Preprocessing", until: 0.40 },
+    { name: "Calibrating", until: 0.55 },
+    { name: "Detecting beams", until: 0.85 },
+    { name: "Writing outputs", until: 1.00 },
+  ];
+  let procStartTs = 0;
+  let procSimulationId = null;
+  let uploadPhaseDone = false;
 
-    function animatePianoKeys() {
-      pianoKeys.forEach(key => key.classList.remove('active'));
-      const count = 2 + Math.floor(Math.random() * 3);
-      const indices = [];
-      while (indices.length < count) {
-        const i = Math.floor(Math.random() * pianoKeys.length);
-        if (!indices.includes(i)) indices.push(i);
+  function fmtElapsed(ms) {
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return s + "s";
+    return Math.floor(s / 60) + "m " + (s % 60) + "s";
+  }
+
+  function addLogLine(msg) {
+    const elapsedMs = performance.now() - procStartTs;
+    const t = (elapsedMs / 1000).toFixed(1).padStart(4, "0");
+    const line = document.createElement("div");
+    line.className = "line new";
+    line.innerHTML = `<span class="time">${t}</span>${escapeHtml(msg)} <span class="ok">✓</span>`;
+    // Dim the previously-new line
+    const prev = procLog.querySelector(".line.new");
+    if (prev) prev.classList.remove("new");
+    procLog.appendChild(line);
+    // Trim to last ~6 lines
+    while (procLog.children.length > 6) procLog.removeChild(procLog.firstChild);
+  }
+
+  function startProcSimulator() {
+    procStartTs = performance.now();
+    procLog.innerHTML = '<div class="line new"><span class="time">00.0</span>Queuing job</div>';
+    procPhase.textContent = "Connecting to server";
+    procPct.textContent = "0";
+    procEta.textContent = "—";
+    procFill.style.width = "0%";
+    statPhase.textContent = "Queued";
+    statElapsed.textContent = "0s";
+    statEta.textContent = "—";
+    uploadPhaseDone = false;
+
+    let p = 0;
+    let logIdx = 0;
+
+    procSimulationId = setInterval(() => {
+      // Progress curves: slow near end (processing is synchronous, we don't know actual progress)
+      const speed = p < 0.4 ? 0.010 : p < 0.7 ? 0.006 : p < 0.9 ? 0.003 : 0.001;
+      p = Math.min(0.97, p + speed + Math.random() * 0.003);
+
+      const phase = PHASES.find(ph => p < ph.until) || PHASES[PHASES.length - 1];
+      // If we're in the uploading phase but upload already finished, skip ahead
+      if (phase.name === "Uploading" && uploadPhaseDone) p = Math.max(p, PHASES[0].until + 0.01);
+
+      procPhase.textContent = phase.name + "…";
+      procPct.textContent = Math.floor(p * 100);
+      procFill.style.width = (p * 100) + "%";
+
+      const elapsed = performance.now() - procStartTs;
+      statPhase.textContent = phase.name;
+      statElapsed.textContent = fmtElapsed(elapsed);
+
+      const etaMs = p > 0.02 ? Math.max(0, (elapsed / p) * (1 - p)) : 0;
+      procEta.textContent = p > 0.95 ? "finishing" : (etaMs > 0 ? fmtElapsed(etaMs) : "—");
+      statEta.textContent = p > 0.02 ? fmtElapsed(elapsed / p) : "—";
+
+      // emit log lines as we cross thresholds
+      const targetIdx = Math.floor(p * LOG_LINES.length);
+      while (logIdx < targetIdx && logIdx < LOG_LINES.length) {
+        addLogLine(LOG_LINES[logIdx]);
+        logIdx++;
       }
-      indices.forEach(i => pianoKeys[i].classList.add('active'));
+    }, 250);
+  }
+
+  function stopProcSimulator(complete) {
+    if (procSimulationId) clearInterval(procSimulationId);
+    procSimulationId = null;
+    if (complete) {
+      procFill.style.width = "100%";
+      procPct.textContent = "100";
+      procPhase.textContent = "Done";
+      statPhase.textContent = "Complete";
+      statEta.textContent = fmtElapsed(performance.now() - procStartTs);
+    }
+  }
+
+  function doSubmit() {
+    const form = new FormData();
+    if (currentTab === "youtube") {
+      form.append("youtube_url", urlInput.value.trim());
+    } else {
+      form.append("video_file", activeFile);
+    }
+    if (trimStart.value.trim()) form.append("trim_start", trimStart.value.trim());
+    if (trimEnd.value.trim()) form.append("trim_end", trimEnd.value.trim());
+
+    setScene("processing");
+    startProcSimulator();
+
+    const isUpload = currentTab === "upload";
+    if (isUpload) {
+      uploadWrap.classList.remove("hidden");
+      uploadFill.style.width = "0%";
+      uploadPct.textContent = "0%";
+    } else {
+      uploadWrap.classList.add("hidden");
+      uploadPhaseDone = true;
     }
 
-    pianoInterval = setInterval(animatePianoKeys, 900);
-    animatePianoKeys();
-
-    // ---- Loading messages cycle ----
-    const loadingMessages = [
-      'Connecting to server',
-      'Processing video',
-      'Preprocessing with FFmpeg',
-      'Calibrating background',
-      'Analyzing frames',
-      'Detecting key presses',
-      'Removing spillover',
-      'Generating sheet music',
-      'Almost there',
-    ];
-    let msgIndex = 0;
-    let msgInterval;
-
-    function cycleLoadingMessage() {
-      const msgEl = document.getElementById('loading-message');
-      msgIndex = (msgIndex + 1) % loadingMessages.length;
-      msgEl.innerHTML = loadingMessages[msgIndex] + '<span>.</span><span>.</span><span>.</span>';
-    }
-
-    // ---- Form submission ----
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-
-      const formData = new FormData();
-
-      if (activeTab === 'youtube') {
-        const url = youtubeInput.value.trim();
-        if (!url) { showError('Please enter a YouTube URL.'); return; }
-        formData.append('youtube_url', url);
-      } else {
-        if (!videoFileInput.files.length) { showError('Please select a video file.'); return; }
-        const file = videoFileInput.files[0];
-        const maxSize = 500 * 1024 * 1024; // 500 MB
-        if (file.size > maxSize) {
-          showError('File exceeds the 500 MB limit. Please use a shorter or lower-quality video.');
-          return;
-        }
-        formData.append('video_file', file);
-      }
-
-      // Optional trim times
-      const trimStart = document.getElementById('trim-start').value.trim();
-      const trimEnd = document.getElementById('trim-end').value.trim();
-      if (trimStart) formData.append('trim_start', trimStart);
-      if (trimEnd) formData.append('trim_end', trimEnd);
-
-      // Show loading, hide others
-      submitBtn.disabled = true;
-      loading.classList.remove('hidden');
-      error.classList.add('hidden');
-      results.classList.add('hidden');
-      framePreview.classList.add('hidden');
-
-      msgIndex = 0;
-      msgInterval = setInterval(cycleLoadingMessage, 3500);
-
-      const uploadProgressEl = document.getElementById('upload-progress');
-      const uploadProgressBar = document.getElementById('upload-progress-bar');
-      const loadingHint = document.getElementById('loading-hint');
-      const isFileUpload = activeTab === 'upload';
-
-      if (isFileUpload) {
-        uploadProgressEl.classList.remove('hidden');
-        uploadProgressBar.style.width = '0%';
-        loadingHint.textContent = 'Uploading...';
-      }
-
-      try {
-        // Use XHR for upload progress, then parse response
-        const { status, responseText } = await new Promise((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open('POST', '/api/process');
-
-          // Attach auth header if signed in
-          if (window._firebaseAuth && window._firebaseAuth.auth.currentUser) {
-            window._firebaseAuth.auth.currentUser.getIdToken().then(token => {
-              xhr.setRequestHeader('Authorization', 'Bearer ' + token);
-              xhr.send(formData);
-            });
-          } else {
-            xhr.send(formData);
-          }
-
-          xhr.upload.addEventListener('progress', (e) => {
-            if (e.lengthComputable && isFileUpload) {
-              const pct = Math.round((e.loaded / e.total) * 100);
-              uploadProgressBar.style.width = pct + '%';
-              if (pct >= 100) {
-                uploadProgressEl.classList.add('hidden');
-                loadingHint.textContent = 'This may take a few minutes for longer videos';
-              }
-            }
-          });
-
-          xhr.addEventListener('load', () => resolve({ status: xhr.status, responseText: xhr.responseText }));
-          xhr.addEventListener('error', () => reject(new Error('Network error')));
-          xhr.addEventListener('abort', () => reject(new Error('Request aborted')));
-        });
-
-        uploadProgressEl.classList.add('hidden');
-
-        if (status === 413) {
-          showError('File too large (max 500 MB). Please use a shorter or lower-quality video.');
-          return;
-        }
-
-        let data;
+    const send = async () => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/process");
+      if (currentUser && window._firebaseAuth) {
         try {
-          data = JSON.parse(responseText);
-        } catch {
-          showError('Server returned an unexpected response (HTTP ' + status + '). Please try again.');
+          const token = await currentUser.getIdToken();
+          xhr.setRequestHeader("Authorization", "Bearer " + token);
+        } catch { /* no-op — server will 401 */ }
+      }
+
+      xhr.upload.addEventListener("progress", (e) => {
+        if (!isUpload || !e.lengthComputable) return;
+        const pct = Math.round((e.loaded / e.total) * 100);
+        uploadFill.style.width = pct + "%";
+        uploadPct.textContent = pct + "%";
+        if (pct >= 100) {
+          uploadWrap.classList.add("hidden");
+          uploadPhaseDone = true;
+        }
+      });
+
+      xhr.addEventListener("load", () => {
+        stopProcSimulator(xhr.status >= 200 && xhr.status < 300);
+        if (xhr.status === 413) {
+          setScene("idle");
+          showError("File too large (max 500 MB). Please use a shorter or lower-quality video.");
           return;
         }
-
-        if (status < 200 || status >= 300) {
-          showError(data.error_type ? data : (data.error || 'Processing failed.'));
+        let data;
+        try { data = JSON.parse(xhr.responseText); }
+        catch { setScene("idle"); showError("Server returned an unexpected response (HTTP " + xhr.status + ")."); return; }
+        if (xhr.status < 200 || xhr.status >= 300) {
+          setScene("idle");
+          showError(data.error_type ? data : (data.error || "Processing failed."));
           return;
         }
-
-        currentJobId = data.job_id;
-
-        // Display sheet music
-        sheetMusic.textContent = data.sheet_music;
-        if (data.sheet_music_truncated) {
-          sheetMusic.textContent += '\n\n--- Output truncated for display. Download the full file below. ---';
-        }
-
-        // Build download buttons with icons
-        downloads.innerHTML = '';
-        const fileIcons = {
-          'output.txt': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
-          'piano.csv': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>',
-          'sheet_music.txt': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
-        };
-        for (const filename of data.files) {
-          const btn = document.createElement('button');
-          btn.className = 'download-btn';
-          btn.innerHTML = (fileIcons[filename] || '') + ' ' + filename;
-          btn.addEventListener('click', async () => {
-            const resp = await fetch('/api/download/' + data.job_id + '/' + filename);
-            if (!resp.ok) return;
-            const blob = await resp.blob();
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(a.href);
-          });
-          downloads.appendChild(btn);
-        }
-
-        // Set up frame preview
-        previewFrames = data.preview_frames || [];
-        if (previewFrames.length > 0) {
-          currentFrameIndex = 0;
-          frameSlider.max = previewFrames.length - 1;
-          frameSlider.value = 0;
-          showFrame(0);
-          framePreview.classList.remove('hidden');
-        } else {
-          framePreview.classList.add('hidden');
-        }
-
-        results.classList.remove('hidden');
-        results.classList.add('results-enter');
-
-        clearInterval(pianoInterval);
-        pianoKeys.forEach(key => key.classList.remove('active'));
-
-      } catch (err) {
-        showError('Request failed. Please try again.');
-      } finally {
-        loading.classList.add('hidden');
-        submitBtn.disabled = false;
-        clearInterval(msgInterval);
-      }
-    });
-
-    // ---- Frame preview navigation ----
-    async function showFrame(index) {
-      if (index < 0 || index >= previewFrames.length) return;
-      currentFrameIndex = index;
-      const filename = previewFrames[index];
-      try {
-        const resp = await fetch('/api/preview/' + currentJobId + '/' + filename);
-        if (resp.ok) {
-          const blob = await resp.blob();
-          previewImg.src = URL.createObjectURL(blob);
-        } else {
-          previewImg.alt = 'Failed to load frame';
-        }
-      } catch {
-        previewImg.alt = 'Failed to load frame';
-      }
-
-      const match = filename.match(/frame_(\d+)\.jpg/);
-      const frameNum = match ? parseInt(match[1], 10) : index;
-      const totalSec = frameNum / 24;
-      const min = Math.floor(totalSec / 60);
-      const sec = (totalSec % 60).toFixed(1);
-      const ts = min + ':' + (sec < 10 ? '0' : '') + sec;
-      frameCounter.textContent = ts + '  (' + (index + 1) + ' / ' + previewFrames.length + ')';
-
-      prevBtn.disabled = (index === 0);
-      nextBtn.disabled = (index === previewFrames.length - 1);
-      frameSlider.value = index;
-    }
-
-    prevBtn.addEventListener('click', () => showFrame(currentFrameIndex - 1));
-    nextBtn.addEventListener('click', () => showFrame(currentFrameIndex + 1));
-    frameSlider.addEventListener('input', () => showFrame(parseInt(frameSlider.value, 10)));
-
-    document.addEventListener('keydown', (e) => {
-      if (framePreview.classList.contains('hidden')) return;
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        showFrame(currentFrameIndex - 1);
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        showFrame(currentFrameIndex + 1);
-      }
-    });
-
-    // ---- Error display system ----
-    const ICON_X_CIRCLE = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
-    const ICON_MUSIC = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
-    const ICON_CLOUD_OFF = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>';
-    const ICON_ALERT = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
-
-    const ERROR_CONFIG = {
-      not_piano: {
-        title: 'Not a piano video',
-        icon: ICON_MUSIC,
-        cssClass: 'error--notice',
-        suggestion: 'This app is built for Synthesia-style piano tutorials. Try a video with "piano" or "Synthesia" in the title.',
-      },
-      download_failed: {
-        title: 'Download failed',
-        icon: ICON_CLOUD_OFF,
-        cssClass: 'error--danger',
-        suggestion: 'YouTube may block cloud downloads. Try downloading the video yourself and use the Upload Video tab instead.',
-      },
-      processing_failed: {
-        title: 'Processing failed',
-        icon: ICON_ALERT,
-        cssClass: 'error--danger',
-        suggestion: 'Try a different video or a shorter clip. If this keeps happening, the video format may not be supported.',
-      },
+        enterResults(data);
+      });
+      xhr.addEventListener("error", () => {
+        stopProcSimulator(false);
+        setScene("idle");
+        showError("Network error. Check your connection and try again.");
+      });
+      xhr.addEventListener("abort", () => {
+        stopProcSimulator(false);
+        setScene("idle");
+      });
+      xhr.send(form);
     };
+    send();
+  }
 
-    function showError(msgOrData) {
-      let title, detail, suggestion, cssClass, iconHtml;
+  // ============================================================
+  //  Results: downloads + scrubber + sheet music
+  // ============================================================
+  const FILE_META = {
+    "sheet_music.txt": { ext: ".txt", desc: "Sheet music" },
+    "piano.csv":       { ext: ".csv", desc: "Keys × frames" },
+    "output.txt":      { ext: ".txt", desc: "Raw log" },
+  };
 
-      if (typeof msgOrData === 'object' && msgOrData.error_type) {
-        const config = ERROR_CONFIG[msgOrData.error_type] || {};
-        title = config.title || 'Error';
-        detail = msgOrData.error || '';
-        suggestion = config.suggestion || null;
-        cssClass = config.cssClass || 'error--danger';
-        iconHtml = config.icon || ICON_X_CIRCLE;
-      } else {
-        title = '';
-        detail = typeof msgOrData === 'string' ? msgOrData : 'An error occurred.';
-        suggestion = null;
-        cssClass = 'error--danger';
-        iconHtml = ICON_X_CIRCLE;
-      }
+  function enterResults(data) {
+    currentJobId = data.job_id;
+    currentFiles = data.files || [];
+    previewFrames = data.preview_frames || [];
+    currentFrameIdx = 0;
 
-      error.classList.remove('error--notice', 'error--danger');
-      error.classList.add(cssClass);
-      errorIcon.innerHTML = iconHtml;
-      errorTitle.textContent = title;
-      errorTitle.style.display = title ? '' : 'none';
-      errorDetail.textContent = detail;
-
-      if (suggestion) {
-        errorSuggestion.textContent = suggestion;
-        errorSuggestion.classList.remove('hidden');
-      } else {
-        errorSuggestion.classList.add('hidden');
-      }
-
-      error.classList.remove('hidden');
-      loading.classList.add('hidden');
-      submitBtn.disabled = false;
-      clearInterval(msgInterval);
+    // download chips
+    downloadChips.innerHTML = "";
+    for (const filename of currentFiles) {
+      const meta = FILE_META[filename] || { ext: "." + filename.split(".").pop(), desc: filename };
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "download-chip";
+      btn.innerHTML =
+        `<span class="ext">${escapeHtml(meta.ext)}</span>` +
+        `<span class="dsc">${escapeHtml(meta.desc)}</span>` +
+        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>`;
+      btn.addEventListener("click", () => downloadFile(filename));
+      downloadChips.appendChild(btn);
     }
 
-    errorDismiss.addEventListener('click', () => {
-      error.classList.add('hidden');
-    });
+    // sheet music text → colorize
+    renderSheet(data.sheet_music || "", !!data.sheet_music_truncated);
 
-    // ---- Firebase Auth Integration ----
-    (function initFirebaseAuth() {
-      const checkReady = setInterval(() => {
-        if (!window._firebaseAuth) return;
-        clearInterval(checkReady);
+    // scrubber + preview
+    setupScrubber();
 
-        const { auth, provider, signInWithPopup, onAuthStateChanged, signOut: fbSignOut } = window._firebaseAuth;
-        const loginBtn = document.getElementById('login-btn');
-        const userProfile = document.getElementById('user-profile');
-        const userAvatar = document.getElementById('user-avatar');
-        const userName = document.getElementById('user-name');
-        const signOutBtn = document.getElementById('sign-out-btn');
+    // meta
+    const totalFrames = previewFrames.length > 0 ? parseFrameIdx(previewFrames[previewFrames.length - 1]) + 1 : 0;
+    songFrames.textContent = totalFrames ? `${totalFrames.toLocaleString()} frames` : "— frames";
 
-        let currentUser = null;
-        let pendingSubmit = false;
+    setScene("results");
+  }
 
-        // Listen for auth state changes
-        onAuthStateChanged(auth, (user) => {
-          currentUser = user;
-          if (user) {
-            // Signed in — show profile, hide login button, update submit text
-            submitBtnText.textContent = 'Process Video';
-            userAvatar.src = user.photoURL || '';
-            userName.textContent = user.displayName || user.email || '';
-            userProfile.classList.remove('hidden');
-            loginBtn.classList.add('hidden');
+  async function downloadFile(filename) {
+    if (!currentJobId) return;
+    const options = {};
+    if (currentUser) {
+      try {
+        const token = await currentUser.getIdToken();
+        options.headers = { Authorization: "Bearer " + token };
+      } catch { /* fall through */ }
+    }
+    const resp = await fetch(`/api/download/${currentJobId}/${encodeURIComponent(filename)}`, options);
+    if (!resp.ok) { showError("Download failed (HTTP " + resp.status + ")"); return; }
+    const blob = await resp.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
 
-            // If we were waiting to submit after sign-in, do it now
-            if (pendingSubmit) {
-              pendingSubmit = false;
-              form.requestSubmit();
-            }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function renderSheet(text, truncated) {
+    if (!text) {
+      asciiViewport.innerHTML = '<span style="color:var(--ink-mute)">No sheet music output.</span>';
+      sheetMeta.textContent = "0 rows";
+      return;
+    }
+    // Colorize: wrap notes in accent span, rests in dim span
+    const html = escapeHtml(text)
+      .replace(/---/g, '<span class="rest">---</span>')
+      .replace(/([A-G]#?\d+)/g, '<span class="note">$1</span>');
+    let out = html;
+    if (truncated) {
+      out += '<span class="truncated">— output truncated for display · download the full file above —</span>';
+    }
+    asciiViewport.innerHTML = out;
+    const rows = text.split("\n").filter(l => l.length > 0).length;
+    sheetMeta.textContent = `${rows} rows`;
+  }
+
+  function parseFrameIdx(filename) {
+    const m = filename && filename.match(/frame_(\d+)\.jpg/);
+    return m ? parseInt(m[1], 10) : 0;
+  }
+
+  function fmtTimestamp(seconds) {
+    if (!isFinite(seconds)) seconds = 0;
+    const m = Math.floor(seconds / 60);
+    const r = seconds - m * 60;
+    return `${m}:${r.toFixed(6).padStart(9, "0")}`;
+  }
+
+  function setupScrubber() {
+    // ticks: 80 evenly spaced
+    scrubTicks.innerHTML = "";
+    const N = Math.min(80, Math.max(20, previewFrames.length));
+    for (let i = 0; i < N; i++) {
+      const t = document.createElement("div");
+      t.className = "scrub-tick";
+      // pseudo-random but deterministic heights based on index
+      t.style.height = (6 + ((i * 37) % 20)) + "px";
+      scrubTicks.appendChild(t);
+    }
+    const totalFrames = previewFrames.length > 0 ? parseFrameIdx(previewFrames[previewFrames.length - 1]) + 1 : 0;
+    scrubFramesTotal.textContent = totalFrames.toLocaleString();
+    scrubTotal.textContent = fmtTimestamp(totalFrames / 24);
+    if (previewFrames.length === 0) {
+      framePlaceholder.classList.remove("hidden");
+      previewImg.classList.add("hidden");
+      scrubPrev.disabled = scrubNext.disabled = scrubPlay.disabled = true;
+      scrubCursor.style.left = "0%";
+      scrubPlayed.style.width = "0%";
+      return;
+    }
+    framePlaceholder.classList.add("hidden");
+    previewImg.classList.remove("hidden");
+    scrubPrev.disabled = scrubNext.disabled = scrubPlay.disabled = false;
+    showFrame(0);
+  }
+
+  async function showFrame(idx) {
+    if (idx < 0 || idx >= previewFrames.length) return;
+    currentFrameIdx = idx;
+    const filename = previewFrames[idx];
+    const fr = parseFrameIdx(filename);
+    scrubFrame.textContent = fr.toLocaleString();
+    scrubTime.textContent = fmtTimestamp(fr / 24);
+
+    const pct = previewFrames.length > 1 ? (idx / (previewFrames.length - 1)) * 100 : 0;
+    scrubCursor.style.left = pct + "%";
+    scrubPlayed.style.width = pct + "%";
+    scrubPrev.disabled = idx === 0;
+    scrubNext.disabled = idx === previewFrames.length - 1;
+
+    // fetch with auth if available; browsers can't set headers on <img src>, so we blob-it
+    const options = {};
+    if (currentUser) {
+      try {
+        const token = await currentUser.getIdToken();
+        options.headers = { Authorization: "Bearer " + token };
+      } catch { /* ignore */ }
+    }
+    try {
+      const resp = await fetch(`/api/preview/${currentJobId}/${encodeURIComponent(filename)}`, options);
+      if (resp.ok) {
+        const blob = await resp.blob();
+        const oldSrc = previewImg.src;
+        previewImg.src = URL.createObjectURL(blob);
+        if (oldSrc && oldSrc.startsWith("blob:")) URL.revokeObjectURL(oldSrc);
+      }
+    } catch { /* best-effort */ }
+  }
+
+  scrubPrev.addEventListener("click", () => showFrame(currentFrameIdx - 1));
+  scrubNext.addEventListener("click", () => showFrame(currentFrameIdx + 1));
+  scrubPlay.addEventListener("click", () => togglePlay());
+
+  function togglePlay() {
+    playingPreview = !playingPreview;
+    scrubPlayIcon.innerHTML = playingPreview
+      ? '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>'
+      : '<path d="M7 4l14 8-14 8V4z"/>';
+    if (playingPreview) {
+      let last = performance.now();
+      const step = (now) => {
+        if (!playingPreview) return;
+        const dt = now - last;
+        if (dt > 250) {  // 4 fps playback (preview is every 6 frames of a 24fps source = 4/sec)
+          last = now;
+          if (currentFrameIdx < previewFrames.length - 1) {
+            showFrame(currentFrameIdx + 1);
           } else {
-            // Signed out — show login button, hide profile
-            submitBtnText.textContent = 'Sign in to Process';
-            userProfile.classList.add('hidden');
-            loginBtn.classList.remove('hidden');
+            togglePlay();
+            return;
           }
-        });
+        }
+        previewRaf = requestAnimationFrame(step);
+      };
+      previewRaf = requestAnimationFrame(step);
+    } else {
+      if (previewRaf) cancelAnimationFrame(previewRaf);
+      previewRaf = null;
+    }
+  }
 
-        // Top-right Login button — triggers Google Sign-In popup
-        loginBtn.addEventListener('click', () => {
-          signInWithPopup(auth, provider).catch((err) => {
-            if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
-              showError('Sign-in failed: ' + err.message);
-            }
-          });
-        });
+  scrubTrack.addEventListener("click", (e) => {
+    const rect = scrubTrack.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const idx = Math.round(Math.max(0, Math.min(1, x)) * (previewFrames.length - 1));
+    if (isFinite(idx)) showFrame(idx);
+  });
 
-        // Sign out
-        signOutBtn.addEventListener('click', () => {
-          fbSignOut(auth);
-        });
+  document.addEventListener("keydown", (e) => {
+    if (app.dataset.scene !== "results") return;
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+    if (e.key === "ArrowLeft") { e.preventDefault(); showFrame(currentFrameIdx - 1); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); showFrame(currentFrameIdx + 1); }
+    else if (e.key === " ") { e.preventDefault(); if (previewFrames.length) togglePlay(); }
+  });
 
-        // Intercept submit when not signed in — trigger Google Sign-In popup
-        submitBtn.addEventListener('click', (e) => {
-          if (!currentUser) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            // Validate input before prompting sign-in
-            if (activeTab === 'youtube') {
-              const url = youtubeInput.value.trim();
-              if (!url) { showError('Please enter a YouTube URL.'); return; }
-            } else {
-              if (!videoFileInput.files.length) { showError('Please select a video file.'); return; }
-            }
-            pendingSubmit = true;
-            signInWithPopup(auth, provider).catch((err) => {
-              pendingSubmit = false;
-              if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
-                showError('Sign-in failed: ' + err.message);
-              }
-            });
-          }
-        });
+  newVideoBtn.addEventListener("click", () => {
+    if (playingPreview) togglePlay();
+    previewFrames = [];
+    currentJobId = null;
+    currentFiles = [];
+    currentFrameIdx = 0;
+    setScene("idle");
+  });
 
-        // Patch fetch to attach the Firebase ID token to all /api/ requests
-        const originalFetch = window.fetch;
-        window.fetch = async function(url, options = {}) {
-          if (typeof url === 'string' && url.startsWith('/api/') && currentUser) {
-            const idToken = await currentUser.getIdToken();
-            options.headers = options.headers || {};
-            options.headers['Authorization'] = 'Bearer ' + idToken;
-          }
-          return originalFetch.call(this, url, options);
-        };
+  // ============================================================
+  //  Error display
+  // ============================================================
+  const ICON_X = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+  const ICON_MUSIC = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+  const ICON_CLOUD = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>';
+  const ICON_ALERT = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+  const ICON_CLOCK = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
 
-      }, 50);
-    })();
+  const ERROR_CONFIG = {
+    not_piano:         { title: "Not a piano video",    icon: ICON_MUSIC, cls: "notice", suggest: "This app is built for Synthesia-style piano tutorials. Try a video with \"piano\" or \"Synthesia\" in the title." },
+    download_failed:   { title: "Download failed",      icon: ICON_CLOUD, cls: "danger", suggest: "YouTube may block cloud downloads. Try downloading the video yourself and use the Upload tab." },
+    processing_failed: { title: "Processing failed",    icon: ICON_ALERT, cls: "danger", suggest: "Try a different video or a shorter clip. If this keeps happening, the format may not be supported." },
+    rate_limited:      { title: "Slow down a bit",      icon: ICON_CLOCK, cls: "notice", suggest: "Each account is limited to one submission per minute." },
+    signin:            { title: "Sign-in failed",       icon: ICON_X,     cls: "danger", suggest: null },
+    validation:        { title: "Check your input",     icon: ICON_ALERT, cls: "notice", suggest: null },
+  };
+
+  function showError(msgOrData) {
+    let title, detail, suggest, cls, iconHtml;
+    if (msgOrData && typeof msgOrData === "object" && msgOrData.error_type) {
+      const cfg = ERROR_CONFIG[msgOrData.error_type] || {};
+      title = cfg.title || "Error";
+      detail = msgOrData.detail || msgOrData.error || "";
+      suggest = cfg.suggest || null;
+      cls = cfg.cls || "danger";
+      iconHtml = cfg.icon || ICON_X;
+    } else {
+      title = "";
+      detail = typeof msgOrData === "string" ? msgOrData : "An error occurred.";
+      suggest = null;
+      cls = "danger";
+      iconHtml = ICON_X;
+    }
+    errorBanner.classList.remove("danger", "notice");
+    errorBanner.classList.add(cls);
+    errorIcon.innerHTML = iconHtml;
+    errorTitle.textContent = title;
+    errorTitle.style.display = title ? "" : "none";
+    errorDetail.textContent = detail;
+    if (suggest) { errorSuggestion.textContent = suggest; errorSuggestion.classList.remove("hidden"); }
+    else { errorSuggestion.classList.add("hidden"); }
+    errorMount.classList.remove("hidden");
+    // mount position: place below the card in idle by appending after #scene-idle's composer
+  }
+  function hideError() { errorMount.classList.add("hidden"); }
+  errorDismiss.addEventListener("click", hideError);
+
+  // ============================================================
+  //  Boot
+  // ============================================================
+  startStage();
+  updateProcessEnabled();
   </script>
 </body>
 </html>
